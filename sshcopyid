@@ -1,0 +1,325 @@
+#!/bin/bash
+
+# SSH Key Distribution Script for OEL 9.4 Server Group
+# Автоматическая генерация и распространение SSH ключей для user1
+
+set -euo pipefail
+
+# Конфигурация
+USERNAME="user1"
+PASSWORD="user1"
+KEY_TYPE="rsa"
+KEY_SIZE="4096"
+KEY_COMMENT="user1@$(hostname)-$(date +%Y%m%d)"
+
+# Список серверов (замените на ваши IP адреса)
+SERVERS=(
+    "192.168.1.10"
+    "192.168.1.11"
+    "192.168.1.12"
+    "192.168.1.13"
+    "192.168.1.14"
+    "192.168.1.15"
+    "192.168.1.16"
+    "192.168.1.17"
+    "192.168.1.18"
+    "192.168.1.19"
+    "192.168.1.20"
+    "192.168.1.21"
+    "192.168.1.22"
+    "192.168.1.23"
+    "192.168.1.24"
+)
+
+# Цвета для вывода
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Функция логирования
+log() {
+    echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+}
+
+success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+# Проверка зависимостей
+check_dependencies() {
+    log "Проверка зависимостей..."
+    
+    local deps=("ssh-keygen" "ssh-copy-id" "sshpass")
+    local missing_deps=()
+    
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" &> /dev/null; then
+            missing_deps+=("$dep")
+        fi
+    done
+    
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        error "Отсутствуют зависимости: ${missing_deps[*]}"
+        log "Установка зависимостей..."
+        
+        # Определение пакетного менеджера
+        if command -v dnf &> /dev/null; then
+            sudo dnf install -y openssh-clients sshpass
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y openssh-clients sshpass
+        else
+            error "Не удалось найти пакетный менеджер (dnf/yum)"
+            exit 1
+        fi
+    fi
+    
+    success "Все зависимости установлены"
+}
+
+# Генерация SSH ключей
+generate_ssh_keys() {
+    log "Генерация SSH ключей для пользователя $USERNAME..."
+    
+    local key_path="$HOME/.ssh/id_${KEY_TYPE}"
+    
+    # Создание директории .ssh если не существует
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+    
+    # Проверка существования ключей
+    if [[ -f "$key_path" ]]; then
+        warning "SSH ключ уже существует: $key_path"
+        read -p "Перегенерировать ключ? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log "Используется существующий ключ"
+            return 0
+        fi
+        
+        # Создание резервной копии
+        mv "$key_path" "${key_path}.backup.$(date +%s)"
+        mv "${key_path}.pub" "${key_path}.pub.backup.$(date +%s)" 2>/dev/null || true
+    fi
+    
+    # Генерация нового ключа
+    ssh-keygen -t "$KEY_TYPE" -b "$KEY_SIZE" -C "$KEY_COMMENT" -f "$key_path" -N ""
+    
+    if [[ $? -eq 0 ]]; then
+        success "SSH ключи сгенерированы: $key_path"
+        log "Публичный ключ:"
+        cat "${key_path}.pub"
+    else
+        error "Ошибка генерации SSH ключей"
+        exit 1
+    fi
+}
+
+# Проверка доступности сервера
+check_server_connectivity() {
+    local server="$1"
+    local timeout=5
+    
+    # Проверка ping
+    if ! ping -c 1 -W "$timeout" "$server" &> /dev/null; then
+        return 1
+    fi
+    
+    # Проверка SSH порта
+    if ! timeout "$timeout" bash -c "</dev/tcp/$server/22" 2>/dev/null; then
+        return 1
+    fi
+    
+    return 0
+}
+
+# Копирование ключа на сервер
+copy_key_to_server() {
+    local server="$1"
+    local max_retries=3
+    local retry_count=0
+    
+    log "Копирование ключа на сервер $server..."
+    
+    # Проверка доступности сервера
+    if ! check_server_connectivity "$server"; then
+        error "Сервер $server недоступен"
+        return 1
+    fi
+    
+    # Попытки копирования с повторами
+    while [[ $retry_count -lt $max_retries ]]; do
+        if sshpass -p "$PASSWORD" ssh-copy-id -o StrictHostKeyChecking=no -o ConnectTimeout=10 "$USERNAME@$server" 2>/dev/null; then
+            success "Ключ успешно скопирован на $server"
+            
+            # Проверка SSH соединения без пароля
+            if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes "$USERNAME@$server" "echo 'SSH connection test successful'" &>/dev/null; then
+                success "SSH соединение без пароля работает на $server"
+                return 0
+            else
+                warning "SSH соединение без пароля не работает на $server"
+                return 1
+            fi
+        else
+            ((retry_count++))
+            warning "Попытка $retry_count/$max_retries не удалась для $server"
+            sleep 2
+        fi
+    done
+    
+    error "Не удалось скопировать ключ на $server после $max_retries попыток"
+    return 1
+}
+
+# Настройка SSH конфигурации на удаленном сервере
+configure_remote_ssh() {
+    local server="$1"
+    
+    log "Настройка SSH конфигурации на $server..."
+    
+    # Команды для выполнения на удаленном сервере
+    local remote_commands="
+        # Создание .ssh директории если не существует
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Установка правильных прав на authorized_keys
+        chmod 600 ~/.ssh/authorized_keys 2>/dev/null || true
+        
+        # Проверка и настройка SELinux контекста (для OEL)
+        if command -v restorecon &> /dev/null; then
+            restorecon -R ~/.ssh/
+        fi
+        
+        echo 'SSH configuration completed on $(hostname)'
+    "
+    
+    if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "$USERNAME@$server" "$remote_commands"; then
+        success "SSH конфигурация настроена на $server"
+        return 0
+    else
+        error "Ошибка настройки SSH конфигурации на $server"
+        return 1
+    fi
+}
+
+# Тестирование SSH соединений
+test_ssh_connections() {
+    log "Тестирование SSH соединений..."
+    
+    local successful_servers=()
+    local failed_servers=()
+    
+    for server in "${SERVERS[@]}"; do
+        if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes "$USERNAME@$server" "hostname && whoami" &>/dev/null; then
+            successful_servers+=("$server")
+            success "SSH тест пройден: $server"
+        else
+            failed_servers+=("$server")
+            error "SSH тест не пройден: $server"
+        fi
+    done
+    
+    log "Результаты тестирования:"
+    log "Успешных соединений: ${#successful_servers[@]}/${#SERVERS[@]}"
+    
+    if [ ${#failed_servers[@]} -gt 0 ]; then
+        warning "Проблемные серверы: ${failed_servers[*]}"
+    fi
+}
+
+# Генерация отчета
+generate_report() {
+    local report_file="ssh_deployment_report_$(date +%Y%m%d_%H%M%S).txt"
+    
+    log "Генерация отчета: $report_file"
+    
+    {
+        echo "SSH Key Deployment Report"
+        echo "========================="
+        echo "Date: $(date)"
+        echo "User: $USERNAME"
+        echo "Key Type: $KEY_TYPE ($KEY_SIZE bits)"
+        echo "Total Servers: ${#SERVERS[@]}"
+        echo ""
+        echo "Server List:"
+        printf '%s\n' "${SERVERS[@]}"
+        echo ""
+        echo "SSH Public Key:"
+        cat "$HOME/.ssh/id_${KEY_TYPE}.pub" 2>/dev/null || echo "Key file not found"
+        echo ""
+        echo "Deployment completed at: $(date)"
+    } > "$report_file"
+    
+    success "Отчет сохранен: $report_file"
+}
+
+# Основная функция
+main() {
+    log "Начало развертывания SSH ключей на группе серверов OEL 9.4"
+    log "Пользователь: $USERNAME"
+    log "Количество серверов: ${#SERVERS[@]}"
+    
+    # Проверка зависимостей
+    check_dependencies
+    
+    # Генерация SSH ключей
+    generate_ssh_keys
+    
+    # Копирование ключей на серверы
+    local successful_deployments=0
+    local failed_deployments=0
+    
+    for server in "${SERVERS[@]}"; do
+        log "Обработка сервера: $server"
+        
+        if copy_key_to_server "$server"; then
+            if configure_remote_ssh "$server"; then
+                ((successful_deployments++))
+            else
+                ((failed_deployments++))
+            fi
+        else
+            ((failed_deployments++))
+        fi
+        
+        echo "----------------------------------------"
+    done
+    
+    # Тестирование соединений
+    test_ssh_connections
+    
+    # Генерация отчета
+    generate_report
+    
+    # Итоговая статистика
+    log "Развертывание завершено!"
+    success "Успешных развертываний: $successful_deployments"
+    if [ $failed_deployments -gt 0 ]; then
+        error "Неудачных развертываний: $failed_deployments"
+    fi
+    
+    log "Теперь вы можете подключаться к серверам без пароля:"
+    log "ssh $USERNAME@<server_ip>"
+}
+
+# Обработка сигналов
+trap 'echo ""; error "Прервано пользователем"; exit 1' INT TERM
+
+# Проверка, что скрипт не запущен от root
+if [[ $EUID -eq 0 ]]; then
+    error "Не запускайте этот скрипт от пользователя root"
+    exit 1
+fi
+
+# Запуск основной функции
+main "$@"
