@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# Конфигурация
+USER="user1"
+PASSWORD="user1"
+SUDOERS_LINE="$USER ALL=(ALL) NOPASSWD: ALL"
+SUDOERS_FILE="/etc/sudoers.d/$USER"
+SERVERS=("host1.domain" "host2.domain")  # замените на реальные хосты
+LOGFILE="sudoers_update.log"
+
+# Проверка зависимостей
+if ! command -v sshpass &>/dev/null; then
+    echo "❌ Требуется установить sshpass. Завершение." | tee -a "$LOGFILE"
+    exit 1
+fi
+
+# Главный цикл
+for HOST in "${SERVERS[@]}"; do
+    echo "=== [$HOST] Обработка начата ===" | tee -a "$LOGFILE"
+
+    sshpass -p "$PASSWORD" ssh -o StrictHostKeyChecking=no "$USER@$HOST" bash -s <<'EOF'
+set -e
+
+echo "[$(hostname)] 🔍 Проверка пользователя: \$(whoami)"
+if [ "\$(whoami)" != "user1" ]; then
+    echo "❌ Ошибка: ожидается user1, но запущено от \$(whoami)"
+    exit 1
+fi
+
+# Команда для sudo
+SUDO="echo user1 | sudo -S"
+
+# Проверка, есть ли файл
+if $SUDO test -f /etc/sudoers.d/user1; then
+    echo "[$(hostname)] ⚠️  Файл уже существует. Проверка содержимого..."
+    EXISTING_CONTENT="\$($SUDO cat /etc/sudoers.d/user1)"
+    if [ "\$EXISTING_CONTENT" == "$SUDOERS_LINE" ]; then
+        echo "[$(hostname)] ✅ Строка уже существует. Пропуск."
+        exit 0
+    else
+        echo "[$(hostname)] ⚠️  Строка отличается. Перезапись."
+        $SUDO rm -f /etc/sudoers.d/user1
+    fi
+fi
+
+# Проверка на атрибут 'immutable'
+if $SUDO lsattr /etc/sudoers.d &>/dev/null; then
+    ATTRS=\$($SUDO lsattr -d /etc/sudoers.d)
+    if echo "\$ATTRS" | grep -q 'i'; then
+        echo "[$(hostname)] ⚠️  Атрибут 'i' найден, удаление..."
+        $SUDO chattr -i /etc/sudoers.d
+    fi
+fi
+
+# Запись строки в файл
+echo "$SUDOERS_LINE" | $SUDO tee /etc/sudoers.d/user1 >/dev/null
+$SUDO chmod 0440 /etc/sudoers.d/user1
+echo "[$(hostname)] ✅ Строка добавлена в /etc/sudoers.d/user1"
+
+EOF
+
+    echo "=== [$HOST] Обработка завершена ===" | tee -a "$LOGFILE"
+done
