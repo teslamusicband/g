@@ -1,0 +1,75 @@
+# Аудит ClickHouse серверов с ClickHouse Keeper (Raft)
+audit_clickhouse() {
+    local server="$1"
+    
+    log "Запуск аудита ClickHouse для $server"
+    
+    # Информация о версии и конфигурации
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT version()'" "clickhouse_version.txt"
+    run_remote "$server" "clickhouse" "cat /etc/clickhouse-server/config.xml" "clickhouse_config.txt"
+    run_remote "$server" "clickhouse" "cat /etc/clickhouse-server/users.xml" "clickhouse_users.txt"
+    run_remote "$server" "clickhouse" "find /etc/clickhouse-server/config.d/ -type f -name '*.xml' -exec cat {} \\;" "clickhouse_config_d.txt"
+    
+    # Проверка конфигурации ClickHouse Keeper
+    run_remote "$server" "clickhouse" "cat /etc/clickhouse-keeper/keeper_config.xml 2>/dev/null || echo 'ClickHouse Keeper config not found'" "clickhouse_keeper_config.txt"
+    run_remote "$server" "clickhouse" "find /etc/clickhouse-keeper/config.d/ -type f -name '*.xml' -exec cat {} \\; 2>/dev/null || echo 'ClickHouse Keeper config.d not found'" "clickhouse_keeper_config_d.txt"
+    
+    # Статус ClickHouse Keeper
+    run_remote "$server" "clickhouse" "systemctl status clickhouse-keeper" "clickhouse_keeper_status.txt"
+    run_remote "$server" "clickhouse" "clickhouse-keeper-client --host localhost --port 9181 -q 'ls /'" "clickhouse_keeper_root.txt"
+    run_remote "$server" "clickhouse" "clickhouse-keeper-client --host localhost --port 9181 -q 'ls /clickhouse'" "clickhouse_keeper_clickhouse_node.txt"
+    
+    # Информация о кластере
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.clusters FORMAT PrettyCompactMonoBlock'" "clickhouse_clusters.txt"
+    
+    # Системные таблицы со статистикой
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.metrics FORMAT PrettyCompactMonoBlock'" "clickhouse_metrics.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.asynchronous_metrics FORMAT PrettyCompactMonoBlock'" "clickhouse_async_metrics.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.settings WHERE changed FROM system FORMAT PrettyCompactMonoBlock'" "clickhouse_changed_settings.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT database, name, engine, total_rows, total_bytes, metadata_path, data_paths FROM system.tables FORMAT PrettyCompactMonoBlock'" "clickhouse_tables.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.merges FORMAT PrettyCompactMonoBlock'" "clickhouse_merges.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.processes FORMAT PrettyCompactMonoBlock'" "clickhouse_processes.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT event_time, event_type, event_level, message FROM system.text_log WHERE event_time > now() - INTERVAL 1 DAY AND event_level >= ''Error'' ORDER BY event_time FORMAT PrettyCompactMonoBlock'" "clickhouse_errors.txt"
+    
+    # Использование диска
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.disks FORMAT PrettyCompactMonoBlock'" "clickhouse_disks.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.storage_policies FORMAT PrettyCompactMonoBlock'" "clickhouse_storage_policies.txt"
+    
+    # Информация о репликации
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.replicas FORMAT PrettyCompactMonoBlock'" "clickhouse_replicas.txt"
+    
+    # ClickHouse Keeper статистика
+    run_remote "$server" "clickhouse" "clickhouse-keeper-client --host localhost --port 9181 -q 'stat /clickhouse'" "clickhouse_keeper_stats.txt"
+    run_remote "$server" "clickhouse" "clickhouse-keeper-client --host localhost --port 9181 -q 'ls /clickhouse/tables'" "clickhouse_keeper_tables.txt"
+    
+    # Информация о Raft кластере ClickHouse Keeper
+    run_remote "$server" "clickhouse" "curl -s http://localhost:9234/metrics 2>/dev/null || echo 'ClickHouse Keeper metrics не доступны на порту 9234'" "clickhouse_keeper_raft_metrics.txt"
+    run_remote "$server" "clickhouse" "echo 'mntr' | nc localhost 9181 2>/dev/null || echo 'ClickHouse Keeper mntr команда не работает'" "clickhouse_keeper_mntr.txt"
+    run_remote "$server" "clickhouse" "echo 'stat' | nc localhost 9181 2>/dev/null || echo 'ClickHouse Keeper stat команда не работает'" "clickhouse_keeper_stat.txt"
+    run_remote "$server" "clickhouse" "echo 'conf' | nc localhost 9181 2>/dev/null || echo 'ClickHouse Keeper conf команда не работает'" "clickhouse_keeper_conf.txt"
+    
+    # Проверка логов ClickHouse Keeper
+    run_remote "$server" "clickhouse" "journalctl -u clickhouse-keeper --since '24 hours ago' | tail -n 500" "clickhouse_keeper_journal.txt"
+    run_remote "$server" "clickhouse" "tail -n 500 /var/log/clickhouse-keeper/clickhouse-keeper.log 2>/dev/null || echo 'ClickHouse Keeper log file not found'" "clickhouse_keeper_log.txt"
+    run_remote "$server" "clickhouse" "tail -n 500 /var/log/clickhouse-keeper/clickhouse-keeper.err.log 2>/dev/null || echo 'ClickHouse Keeper error log file not found'" "clickhouse_keeper_err_log.txt"
+    
+    # Проверка состояния Raft кластера через HTTP API
+    run_remote "$server" "clickhouse" "curl -s http://localhost:9234/api/v1/leader 2>/dev/null || echo 'ClickHouse Keeper HTTP API недоступен'" "clickhouse_keeper_leader.txt"
+    run_remote "$server" "clickhouse" "curl -s http://localhost:9234/api/v1/config 2>/dev/null || echo 'ClickHouse Keeper config API недоступен'" "clickhouse_keeper_api_config.txt"
+    run_remote "$server" "clickhouse" "curl -s http://localhost:9234/api/v1/stat 2>/dev/null || echo 'ClickHouse Keeper stat API недоступен'" "clickhouse_keeper_api_stat.txt"
+    
+    # Проверка сетевых подключений к ClickHouse Keeper
+    run_remote "$server" "clickhouse" "netstat -tunlp | grep -E ':9181|:9234' || ss -tunlp | grep -E ':9181|:9234'" "clickhouse_keeper_network.txt"
+    
+    # Производительность
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.query_log WHERE type >= 2 AND query_start_time > now() - INTERVAL 1 DAY ORDER BY query_duration_ms DESC LIMIT 20 FORMAT PrettyCompactMonoBlock'" "clickhouse_slow_queries.txt"
+    
+    # Проверка координации в ClickHouse (замена ZooKeeper функций)
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.zookeeper WHERE path = ''/clickhouse'' FORMAT PrettyCompactMonoBlock'" "clickhouse_coordination_root.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT path, name FROM system.zookeeper WHERE path = ''/clickhouse/tables'' FORMAT PrettyCompactMonoBlock'" "clickhouse_coordination_tables.txt"
+    
+    # Дополнительные метрики ClickHouse Keeper
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.zookeeper_connection FORMAT PrettyCompactMonoBlock'" "clickhouse_keeper_connection_info.txt"
+    
+    log "Аудит ClickHouse для $server завершен"
+}
