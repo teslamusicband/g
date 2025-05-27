@@ -1,0 +1,160 @@
+Вот подробные комментарии по каждому блоку вывода команды `lscpu` в **Oracle Enterprise Linux (OEL) 9.4**:
+
+---
+
+### **1. Архитектура процессора**
+```plaintext
+Architecture:            x86_64
+```
+- **x86_64** – 64-битная архитектура процессора (AMD64/Intel 64), поддерживающая как 32-битные, так и 64-битные приложения.
+
+---
+
+### **2. Режим(ы) работы CPU**
+```plaintext
+CPU op-mode(s):        32-bit, 64-bit
+```
+- Процессор может работать в **32-битном** и **64-битном** режимах.
+
+---
+
+### **3. Порядок байтов**
+```plaintext
+Byte Order:            Little Endian
+```
+- **Little Endian** – порядок байтов, при котором младший байт хранится по младшему адресу (стандартно для x86/x86_64).
+
+---
+
+### **4. Количество CPU (сокетов)**
+```plaintext
+CPU(s):                4
+```
+- Общее количество **логических процессоров** (включая ядра и гипертрединг).
+
+---
+
+### **5. Количество сокетов**
+```plaintext
+Socket(s):             1
+```
+- Физических процессорных разъемов (**сокетов**) на материнской плате – **1**.
+
+---
+
+### **6. Количество ядер на сокет**
+```plaintext
+Core(s) per socket:    4
+```
+- Каждый физический процессор имеет **4 ядра**.
+
+---
+
+### **7. Потоков на ядро (Hyper-Threading)**
+```plaintext
+Thread(s) per core:    1
+```
+- **1 поток на ядро** – Hyper-Threading (SMT) **отключен** (если бы было 2, значит, HT включен).
+
+---
+
+### **8. Идентификаторы NUMA-узлов**
+```plaintext
+NUMA node(s):          1
+```
+- **1 NUMA-узел** – система не использует NUMA (Non-Uniform Memory Access) или имеет только один узел.
+
+---
+
+### **9. Идентификатор вендора**
+```plaintext
+Vendor ID:             GenuineIntel
+```
+- Процессор производства **Intel** (может быть также `AuthenticAMD` для AMD).
+
+---
+
+### **10. Семейство, модель и степпинг процессора**
+```plaintext
+CPU family:            6
+Model:                 158
+Model name:            Intel(R) Core(TM) i7-7700HQ CPU @ 2.80GHz
+Stepping:              9
+```
+- **Family 6** – семейство процессоров Intel (P6, Pentium M, Core, etc.).
+- **Model 158** – конкретная модель в семействе.
+- **Model name** – маркетинговое название (здесь – i7-7700HQ).
+- **Stepping 9** – ревизия процессора (используется для идентификации исправлений errata).
+
+---
+
+### **11. Частота процессора**
+```plaintext
+CPU MHz:               2800.000
+CPU max MHz:           3800.000
+CPU min MHz:           800.000
+```
+- **Базовая частота: 2.8 GHz**.
+- **Максимальная (Turbo Boost): 3.8 GHz**.
+- **Минимальная (энергосбережение): 0.8 GHz**.
+
+---
+
+### **12. Поддержка виртуализации**
+```plaintext
+Virtualization:        VT-x
+```
+- **VT-x** – аппаратная виртуализация Intel включена (для KVM, VirtualBox и др.).
+
+---
+
+### **13. Кэш-память**
+```plaintext
+L1d cache:             128 KiB
+L1i cache:             128 KiB
+L2 cache:              1 MiB
+L3 cache:              6 MiB
+```
+- **L1d** – кэш данных 1-го уровня (32 KiB на ядро × 4 ядра = 128 KiB).
+- **L1i** – кэш инструкций 1-го уровня.
+- **L2** – кэш 2-го уровня (256 KiB на ядро × 4 ядра = 1 MiB).
+- **L3** – общий кэш 3-го уровня (6 MiB).
+
+---
+
+### **14. Флаги процессора**
+```plaintext
+Flags:                 fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology cpuid tsc_known_freq pni pclmulqdq ssse3 cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx rdrand hypervisor lahf_lm abm 3dnowprefetch invpcid_single pti fsgsbase avx2 invpcid rdseed clflushopt md_clear flush_l1d arch_capabilities
+```
+- Список поддерживаемых инструкций (SSE, AVX, AES-NI и др.) и особенностей CPU.
+
+---
+
+### **15. NUMA-узлы и CPU**
+```plaintext
+NUMA node0 CPU(s):     0-3
+```
+- Все логические процессоры (0-3) относятся к **NUMA node0**.
+
+---
+
+### **16. Уязвимости (Vulnerabilities)**
+```plaintext
+Vulnerabilities:
+Itlb multihit:        KVM: Mitigation: VMX disabled
+L1tf:                 Mitigation: PTE Inversion
+Mds:                  Mitigation: Clear CPU buffers; SMT disabled
+Meldown:              Mitigation: PTI
+Spec store bypass:    Mitigation: Speculative Store Bypass disabled via prctl
+Spectre v1:           Mitigation: usercopy/swapgs barriers and __user pointer sanitization
+Spectre v2:           Mitigation: Retpolines, IBPB: conditional, IBRS_FW, STIBP: disabled, RSB filling
+```
+- Список **аппаратных уязвимостей** (Spectre, Meltdown, MDS и др.) и примененных мер защиты (например, PTI, Retpolines).
+
+---
+
+### **Особенности OEL 9.4**
+- В OEL 9.4 используется ядро **RHEL-совместимое** (например, `5.14.0-xxx`), поэтому вывод `lscpu` аналогичен RHEL 9/CentOS Stream 9.
+- Уязвимости CPU часто патчатся на уровне микроархитектуры или через обновления микрокода (`microcode`).
+
+Если вам нужен более детальный разбор конкретного поля или проверка для вашего железа – уточните!
