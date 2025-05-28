@@ -1,0 +1,795 @@
+#!/bin/bash
+# Скрипт для комплексного аудита серверной инфраструктуры
+# Запуск: ./server_audit.sh [output_directory]
+
+set -e
+
+# Список серверов для аудита 
+# Формат: имя_сервера:роль
+# Указывайте роли: clickhouse, postgres, minio, kafka, k8s-master, k8s-worker, service
+SERVERS=(
+    "192.168.1.1:service"
+)
+
+# SSH пользователь
+SSH_USER="root"
+
+# Директория для сохранения результатов
+OUT_DIR=${1:-"server_audit_$(date +%Y%m%d)"}
+mkdir -p "$OUT_DIR"
+
+# Логирование
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" | tee -a "$OUT_DIR/audit.log"
+}
+
+# Функция для запуска команды на удаленном сервере и сохранения результата
+run_remote() {
+    local server="$1"
+    local role="$2"
+    local cmd="$3"
+    local out_file="$4"
+    
+    log "Выполнение на $server ($role): $cmd"
+    ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$SSH_USER@$server" "$cmd" > "$OUT_DIR/$server/$out_file" 2>&1 || {
+        log "ОШИБКА при выполнении команды на $server: $cmd"
+        echo "ERROR: Command failed" >> "$OUT_DIR/$server/$out_file"
+    }
+}
+
+# Общий аудит для всех серверов
+audit_base_os() {
+    local server="$1"
+    local role="$2"
+    
+    mkdir -p "$OUT_DIR/$server"
+    
+    log "Запуск базового аудита ОС для $server ($role)"
+    
+    # Базовая информация о системе
+    run_remote "$server" "$role" "hostname; uname -a; cat /etc/redhat-release" "01_system_info.txt"
+    run_remote "$server" "$role" "uptime; date; timedatectl" "02_uptime_date.txt"
+    
+    # Информация о CPU
+    run_remote "$server" "$role" "lscpu" "03_cpu_info.txt"
+    run_remote "$server" "$role" "cat /proc/cpuinfo" "03_cpuinfo.txt"
+    run_remote "$server" "$role" "nproc" "03_nproc.txt"
+    
+    # Информация о памяти
+    run_remote "$server" "$role" "free -h" "04_memory_free.txt"
+    run_remote "$server" "$role" "cat /proc/meminfo" "04_meminfo.txt"
+    run_remote "$server" "$role" "vmstat -s" "04_vmstat.txt"
+    run_remote "$server" "$role" "swapon -s" "04_swap.txt"
+    
+    # Дисковая подсистема
+    run_remote "$server" "$role" "df -h" "05_disk_space.txt"
+    run_remote "$server" "$role" "lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT,MODEL,SERIAL" "05_lsblk.txt"
+    run_remote "$server" "$role" "fdisk -l" "05_fdisk.txt"
+    run_remote "$server" "$role" "cat /proc/mdstat 2>/dev/null || echo 'No MD RAID'" "05_mdstat.txt"
+    run_remote "$server" "$role" "pvs; vgs; lvs" "05_lvm.txt"
+    run_remote "$server" "$role" "cat /etc/fstab" "05_fstab.txt"
+    run_remote "$server" "$role" "mount" "05_mount.txt"
+    
+    # Проверка RAID-контроллера Huawei
+    run_remote "$server" "$role" "lspci | grep -i raid" "05_raid_controller.txt"
+    run_remote "$server" "$role" "if command -v storcli &>/dev/null; then storcli /c0 show all; elif command -v arcconf &>/dev/null; then arcconf getconfig 1; elif command -v hpssacli &>/dev/null; then hpssacli ctrl all show config detail; else echo 'No RAID management utility found'; fi" "05_raid_config.txt"
+    
+    # Сетевая конфигурация
+    run_remote "$server" "$role" "ip a" "06_ip_addr.txt"
+    run_remote "$server" "$role" "ip route" "06_ip_route.txt"
+    run_remote "$server" "$role" "ethtool -g eth0 2>/dev/null || echo 'No ethtool info for eth0'" "06_ethtool_buffers.txt"
+    run_remote "$server" "$role" "for i in \$(ip -o link show | awk -F': ' '{print \$2}' | grep -v lo); do ethtool \$i 2>/dev/null || echo \"No ethtool for \$i\"; echo ''; done" "06_ethtool_all.txt"
+    run_remote "$server" "$role" "for i in \$(ip -o link show | awk -F': ' '{print \$2}' | grep -v lo); do ethtool -k \$i 2>/dev/null | grep -v ^Cannot; echo ''; done" "06_ethtool_offload.txt"
+    run_remote "$server" "$role" "netstat -tunlp || ss -tunlp" "06_network_services.txt"
+    run_remote "$server" "$role" "netstat -s || ss -s" "06_netstat_stats.txt"
+    
+    # Настройки ОС
+    run_remote "$server" "$role" "sysctl -a" "07_sysctl.txt"
+    run_remote "$server" "$role" "ulimit -a" "07_ulimit.txt"
+    run_remote "$server" "$role" "cat /etc/security/limits.conf" "07_limits_conf.txt"
+    run_remote "$server" "$role" "ls -la /etc/security/limits.d/ && cat /etc/security/limits.d/*" "07_limits_d.txt"
+    run_remote "$server" "$role" "cat /proc/sys/vm/nr_hugepages" "07_hugepages.txt"
+    run_remote "$server" "$role" "cat /proc/sys/vm/swappiness" "07_swappiness.txt"
+    
+    # Tune системы
+    run_remote "$server" "$role" "if command -v tuned-adm &>/dev/null; then tuned-adm list; tuned-adm active; fi" "08_tuned.txt"
+    
+    # Сервисы и процессы
+    run_remote "$server" "$role" "systemctl list-units --type=service" "09_systemd_services.txt"
+    run_remote "$server" "$role" "ps aux --sort=-%mem | head -n 20" "09_top_memory_processes.txt"
+    run_remote "$server" "$role" "ps aux --sort=-%cpu | head -n 20" "09_top_cpu_processes.txt"
+    run_remote "$server" "$role" "systemctl status chronyd" "09_time_sync.txt"
+    
+    # SELinux
+    run_remote "$server" "$role" "getenforce; sestatus" "10_selinux.txt"
+    
+    # Firewall
+    run_remote "$server" "$role" "systemctl status firewalld" "11_firewalld_status.txt"
+    run_remote "$server" "$role" "firewall-cmd --list-all || echo 'Firewall not configured'" "11_firewall_rules.txt"
+    
+    # Текущая нагрузка и статистика
+    run_remote "$server" "$role" "top -b -n 1" "12_top.txt"
+    run_remote "$server" "$role" "vmstat 1 5" "12_vmstat.txt"
+    run_remote "$server" "$role" "iostat -xz 1 5" "12_iostat.txt"
+    run_remote "$server" "$role" "mpstat -P ALL 1 5" "12_mpstat.txt"
+    run_remote "$server" "$role" "sar -n DEV 1 5" "12_sar_network.txt"
+    run_remote "$server" "$role" "sar -b 1 5" "12_sar_io.txt"
+    
+    # Сбор информации о дисковых I/O параметрах
+    run_remote "$server" "$role" "for disk in \$(lsblk -d -o NAME | grep -v NAME); do echo \"Disk \$disk:\"; cat /sys/block/\$disk/queue/scheduler; cat /sys/block/\$disk/queue/read_ahead_kb; echo ''; done" "13_disk_scheduler.txt"
+    
+    # Журналы системы
+    run_remote "$server" "$role" "journalctl -p err..emerg --since '24 hours ago' | tail -n 500" "14_journal_errors.txt"
+    run_remote "$server" "$role" "dmesg | tail -n 500" "14_dmesg.txt"
+    
+    # Cron задачи
+    run_remote "$server" "$role" "ls -la /etc/cron*" "15_cron_files.txt"
+    run_remote "$server" "$role" "for user in \$(cut -f1 -d: /etc/passwd); do echo \"\$user crontab:\"; crontab -l -u \$user 2>/dev/null || echo \"No crontab for \$user\"; echo ''; done" "15_user_crontabs.txt"
+    
+    # Анализ производительности дисков
+    run_remote "$server" "$role" "if command -v fio &>/dev/null; then echo 'FIO available'; else echo 'FIO not installed'; fi" "16_fio_check.txt"
+    
+    # Информация о памяти
+    run_remote "$server" "$role" "if command -v numactl &>/dev/null; then numactl --hardware; else echo 'NUMA info not available'; fi" "17_numa_info.txt"
+    
+    # Версии ПО
+    run_remote "$server" "$role" "dnf list installed | grep -E 'kernel|bash|openssh|openssl'" "18_core_packages.txt"
+    run_remote "$server" "$role" "dnf check-update" "18_updates_available.txt"
+    
+    log "Базовый аудит для $server завершен"
+}
+
+# Аудит ClickHouse серверов
+audit_clickhouse() {
+    local server="$1"
+    
+    log "Запуск аудита ClickHouse для $server"
+    
+    # Информация о версии и конфигурации
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT version()'" "clickhouse_version.txt"
+    run_remote "$server" "clickhouse" "cat /etc/clickhouse-server/config.xml" "clickhouse_config.txt"
+    run_remote "$server" "clickhouse" "cat /etc/clickhouse-server/users.xml" "clickhouse_users.txt"
+    run_remote "$server" "clickhouse" "find /etc/clickhouse-server/config.d/ -type f -name '*.xml' -exec cat {} \\;" "clickhouse_config_d.txt"
+    
+    # Информация о кластере
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.clusters FORMAT PrettyCompactMonoBlock'" "clickhouse_clusters.txt"
+    
+    # Системные таблицы со статистикой
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.metrics FORMAT PrettyCompactMonoBlock'" "clickhouse_metrics.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.asynchronous_metrics FORMAT PrettyCompactMonoBlock'" "clickhouse_async_metrics.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.settings WHERE changed FROM system FORMAT PrettyCompactMonoBlock'" "clickhouse_changed_settings.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT database, name, engine, total_rows, total_bytes, metadata_path, data_paths FROM system.tables FORMAT PrettyCompactMonoBlock'" "clickhouse_tables.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.merges FORMAT PrettyCompactMonoBlock'" "clickhouse_merges.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.processes FORMAT PrettyCompactMonoBlock'" "clickhouse_processes.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT event_time, event_type, event_level, message FROM system.text_log WHERE event_time > now() - INTERVAL 1 DAY AND event_level >= ''Error'' ORDER BY event_time FORMAT PrettyCompactMonoBlock'" "clickhouse_errors.txt"
+    
+    # Использование диска
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.disks FORMAT PrettyCompactMonoBlock'" "clickhouse_disks.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.storage_policies FORMAT PrettyCompactMonoBlock'" "clickhouse_storage_policies.txt"
+    
+    # Информация о репликации
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.replicas FORMAT PrettyCompactMonoBlock'" "clickhouse_replicas.txt"
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.zookeeper WHERE path = ''/clickhouse'' FORMAT PrettyCompactMonoBlock'" "clickhouse_zookeeper.txt"
+    
+    # Производительность
+    run_remote "$server" "clickhouse" "clickhouse-client --query 'SELECT * FROM system.query_log WHERE type >= 2 AND query_start_time > now() - INTERVAL 1 DAY ORDER BY query_duration_ms DESC LIMIT 20 FORMAT PrettyCompactMonoBlock'" "clickhouse_slow_queries.txt"
+    
+    log "Аудит ClickHouse для $server завершен"
+}
+
+# Аудит PostgreSQL с Patroni
+audit_postgres() {
+    local server="$1"
+    
+    log "Запуск аудита PostgreSQL/Patroni для $server"
+    
+    # Информация о версии и конфигурации PostgreSQL
+    run_remote "$server" "postgres" "sudo -u postgres psql -c 'SELECT version();'" "postgres_version.txt"
+    run_remote "$server" "postgres" "cat /var/lib/pgsql/data/postgresql.conf" "postgres_config.txt"
+    run_remote "$server" "postgres" "cat /var/lib/pgsql/data/pg_hba.conf" "postgres_hba.txt"
+    
+    # Информация о Patroni
+    run_remote "$server" "postgres" "patronictl list" "patroni_list.txt"
+    run_remote "$server" "postgres" "cat /etc/patroni/patroni.yml" "patroni_config.txt"
+    run_remote "$server" "postgres" "systemctl status patroni" "patroni_status.txt"
+    
+    # Статистика баз данных
+    run_remote "$server" "postgres" "sudo -u postgres psql -c 'SELECT * FROM pg_stat_database;'" "postgres_stat_database.txt"
+    run_remote "$server" "postgres" "sudo -u postgres psql -c 'SELECT * FROM pg_stat_bgwriter;'" "postgres_stat_bgwriter.txt"
+    
+    # Информация о текущих запросах
+    run_remote "$server" "postgres" "sudo -u postgres psql -c 'SELECT pid, usename, datname, state, query_start, wait_event_type, wait_event, query FROM pg_stat_activity;'" "postgres_activity.txt"
+    
+    # Медленные запросы
+    run_remote "$server" "postgres" "sudo -u postgres psql -c 'SELECT * FROM pg_stat_statements ORDER BY total_time DESC LIMIT 20;'" "postgres_slow_queries.txt"
+    
+    # Размеры баз данных и таблиц
+    run_remote "$server" "postgres" "sudo -u postgres psql -c 'SELECT datname, pg_size_pretty(pg_database_size(datname)) FROM pg_database ORDER BY pg_database_size(datname) DESC;'" "postgres_db_sizes.txt"
+    run_remote "$server" "postgres" "sudo -u postgres psql -c 'SELECT schemaname, relname, n_live_tup, n_dead_tup, last_vacuum, last_autovacuum FROM pg_stat_user_tables ORDER BY n_dead_tup DESC LIMIT 20;'" "postgres_vacuum_stats.txt"
+    
+    # Информация о блокировках
+    run_remote "$server" "postgres" "sudo -u postgres psql -c 'SELECT * FROM pg_locks pl LEFT JOIN pg_stat_activity psa ON pl.pid = psa.pid;'" "postgres_locks.txt"
+    
+    # Репликация
+    run_remote "$server" "postgres" "sudo -u postgres psql -c 'SELECT * FROM pg_stat_replication;'" "postgres_replication.txt"
+    
+    # PostgreSQL настройки
+    run_remote "$server" "postgres" "sudo -u postgres psql -c 'SHOW ALL;'" "postgres_settings.txt"
+    
+    # Логи PostgreSQL
+    run_remote "$server" "postgres" "if [ -d /var/lib/pgsql/data/log ]; then tail -n 1000 /var/lib/pgsql/data/log/*; else echo 'Logs not found in default location'; fi" "postgres_logs.txt"
+    
+    log "Аудит PostgreSQL/Patroni для $server завершен"
+}
+
+# Аудит MinIO
+audit_minio() {
+    local server="$1"
+    
+    log "Запуск аудита MinIO для $server"
+    
+    # Информация о сервисе
+    run_remote "$server" "minio" "systemctl status minio" "minio_status.txt"
+    run_remote "$server" "minio" "cat /etc/default/minio || cat /etc/minio/minio.conf || echo 'MinIO config not found in standard locations'" "minio_config.txt"
+    
+    # Проверка доступности MinIO API
+    run_remote "$server" "minio" "curl -s -I http://localhost:9000/minio/health/live || echo 'MinIO API не доступен'" "minio_health.txt"
+    
+    # Информация о дисках
+    run_remote "$server" "minio" "df -h | grep -E 'minio|data'" "minio_disk_usage.txt"
+    
+    # Если есть доступ к mc (MinIO Client)
+    run_remote "$server" "minio" "if command -v mc &>/dev/null; then mc admin info local; else echo 'mc не установлен'; fi" "minio_info.txt"
+    run_remote "$server" "minio" "if command -v mc &>/dev/null; then mc admin service status local; else echo 'mc не установлен'; fi" "minio_service_status.txt"
+    
+    # Логи MinIO
+    run_remote "$server" "minio" "journalctl -u minio --since '24 hours ago' | tail -n 500" "minio_logs.txt"
+    
+    log "Аудит MinIO для $server завершен"
+}
+
+# Аудит Kafka
+audit_kafka() {
+    local server="$1"
+    
+    log "Запуск аудита Kafka для $server"
+    
+    # Информация о сервисе
+    run_remote "$server" "kafka" "systemctl status kafka" "kafka_status.txt"
+    run_remote "$server" "kafka" "systemctl status zookeeper" "zookeeper_status.txt"
+    
+    # Конфигурация
+    run_remote "$server" "kafka" "cat /etc/kafka/server.properties" "kafka_server_properties.txt"
+    run_remote "$server" "kafka" "cat /etc/kafka/log4j.properties" "kafka_log4j.txt"
+    run_remote "$server" "kafka" "cat /etc/kafka/zookeeper.properties" "kafka_zookeeper_properties.txt"
+    
+    # Информация о топиках
+    run_remote "$server" "kafka" "kafka-topics.sh --bootstrap-server localhost:9092 --list" "kafka_topics_list.txt"
+    run_remote "$server" "kafka" "for topic in \$(kafka-topics.sh --bootstrap-server localhost:9092 --list); do echo \"Topic: \$topic\"; kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic \$topic; echo ''; done" "kafka_topics_details.txt"
+    
+    # Группы потребителей
+    run_remote "$server" "kafka" "kafka-consumer-groups.sh --bootstrap-server localhost:9092 --list" "kafka_consumer_groups_list.txt"
+    run_remote "$server" "kafka" "for group in \$(kafka-consumer-groups.sh --bootstrap-server localhost:9092 --list); do echo \"Group: \$group\"; kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group \$group; echo ''; done" "kafka_consumer_groups_details.txt"
+    
+    # JVM статистика
+    run_remote "$server" "kafka" "jcmd \$(pgrep -f kafka.Kafka) VM.flags" "kafka_jvm_flags.txt"
+    run_remote "$server" "kafka" "jcmd \$(pgrep -f kafka.Kafka) GC.heap_info" "kafka_heap_info.txt"
+    
+    # ZooKeeper информация
+    run_remote "$server" "kafka" "echo 'ruok' | nc localhost 2181" "zk_ruok.txt"
+    run_remote "$server" "kafka" "echo 'mntr' | nc localhost 2181" "zk_mntr.txt"
+    
+    # Логи
+    run_remote "$server" "kafka" "tail -n 500 /var/log/kafka/server.log" "kafka_server_log.txt"
+    run_remote "$server" "kafka" "tail -n 500 /var/log/kafka/controller.log" "kafka_controller_log.txt"
+    run_remote "$server" "kafka" "tail -n 500 /var/log/zookeeper/zookeeper.log" "zookeeper_log.txt"
+    
+    log "Аудит Kafka для $server завершен"
+}
+
+# Аудит Kubernetes
+audit_kubernetes() {
+    local server="$1"
+    local role="$2"
+    
+    log "Запуск аудита Kubernetes ($role) для $server"
+    
+    # Общая информация о кластере
+    run_remote "$server" "$role" "kubectl version" "k8s_version.txt"
+    run_remote "$server" "$role" "kubectl get nodes -o wide" "k8s_nodes.txt"
+    run_remote "$server" "$role" "kubectl get pods --all-namespaces -o wide" "k8s_pods.txt"
+    run_remote "$server" "$role" "kubectl get services --all-namespaces" "k8s_services.txt"
+    
+    # Информация о системных компонентах
+    run_remote "$server" "$role" "kubectl get pods -n kube-system" "k8s_system_pods.txt"
+    run_remote "$server" "$role" "kubectl get componentstatuses" "k8s_component_status.txt"
+    
+    # Информация о нагрузке
+    run_remote "$server" "$role" "kubectl top nodes" "k8s_nodes_resources.txt"
+    run_remote "$server" "$role" "kubectl top pods --all-namespaces" "k8s_pods_resources.txt"
+    
+    # Информация о хранилище
+    run_remote "$server" "$role" "kubectl get pv" "k8s_pv.txt"
+    run_remote "$server" "$role" "kubectl get pvc --all-namespaces" "k8s_pvc.txt"
+    run_remote "$server" "$role" "kubectl get sc" "k8s_storage_classes.txt"
+    
+    # Проверка контейнеров Java в K8s
+    run_remote "$server" "$role" "for pod in \$(kubectl get pods --all-namespaces -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name} {end}'); do ns=\${pod%% *}; pod_name=\${ns##*/}; ns=\${ns%/*}; echo \"\$ns/\$pod_name\"; kubectl exec -n \$ns \$pod_name -- java -XX:+PrintCommandLineFlags 2>/dev/null || echo 'Not a Java container'; echo ''; done" "k8s_java_flags.txt"
+    
+    # Информация о сети
+    run_remote "$server" "$role" "kubectl get networkpolicies --all-namespaces" "k8s_network_policies.txt"
+    run_remote "$server" "$role" "kubectl get ingress --all-namespaces" "k8s_ingress.txt"
+    
+    # Информация о логах системных компонентов
+    if [[ "$role" == "k8s-master" ]]; then
+        run_remote "$server" "$role" "kubectl logs -n kube-system -l component=kube-apiserver --tail=200" "k8s_apiserver_logs.txt"
+        run_remote "$server" "$role" "kubectl logs -n kube-system -l component=kube-controller-manager --tail=200" "k8s_controller_manager_logs.txt"
+        run_remote "$server" "$role" "kubectl logs -n kube-system -l component=kube-scheduler --tail=200" "k8s_scheduler_logs.txt"
+    fi
+    
+    run_remote "$server" "$role" "kubectl get events --all-namespaces --sort-by='.metadata.creationTimestamp' | tail -n 100" "k8s_events.txt"
+    
+    # Проверка статуса kubelet
+    run_remote "$server" "$role" "systemctl status kubelet" "kubelet_status.txt"
+    run_remote "$server" "$role" "journalctl -u kubelet --since '24 hours ago' | grep -i error | tail -n 200" "kubelet_errors.txt"
+    
+    # Проверка конфигурации kubelet
+    run_remote "$server" "$role" "cat /etc/kubernetes/kubelet.conf || cat /var/lib/kubelet/config.yaml || echo 'Kubelet config not found'" "kubelet_config.txt"
+    
+    log "Аудит Kubernetes ($role) для $server завершен"
+}
+
+# Функция для запуска бенчмарков и более глубокого анализа
+run_benchmarks() {
+    local server="$1"
+    local role="$2"
+    
+    log "Запуск бенчмарков для $server ($role)"
+    
+    # Создаем временный скрипт для бенчмарков
+    cat > /tmp/benchmark.sh << 'EOF'
+#!/bin/bash
+
+echo "=== CPU Benchmark ==="
+# Простой CPU бенчмарк
+echo "Running CPU benchmark..."
+sysbench --test=cpu --cpu-max-prime=20000 run
+
+echo ""
+echo "=== Memory Benchmark ==="
+# Тест памяти
+echo "Running memory benchmark..."
+sysbench --test=memory --memory-block-size=1M --memory-total-size=10G run
+
+echo ""
+echo "=== Disk Benchmark ==="
+# Найдем основной диск для данных
+DATA_DISK=$(df -h | grep -v tmpfs | grep -v boot | sort -rn -k2 | head -n1 | awk '{print $1}')
+DISK_DIR="/tmp/benchmark_test"
+
+mkdir -p $DISK_DIR
+cd $DISK_DIR
+
+echo "Testing sequential read/write on $DATA_DISK (mounted at $DISK_DIR)"
+fio --name=seqread --rw=read --direct=1 --ioengine=libaio --bs=1M --numjobs=4 --size=1G --runtime=30 --group_reporting
+fio --name=seqwrite --rw=write --direct=1 --ioengine=libaio --bs=1M --numjobs=4 --size=1G --runtime=30 --group_reporting
+
+echo "Testing random read/write on $DATA_DISK"
+fio --name=randread --rw=randread --direct=1 --ioengine=libaio --bs=4K --numjobs=32 --size=1G --runtime=30 --group_reporting
+fio --name=randwrite --rw=randwrite --direct=1 --ioengine=libaio --bs=4K --numjobs=32 --size=1G --runtime=30 --group_reporting
+
+cd /
+rm -rf $DISK_DIR
+
+echo ""
+echo "=== Network Benchmark ==="
+echo "Note: Network benchmark requires iperf3 server running on another host"
+# Для сетевого бенчмарка потребуется iperf3 сервер на другой машине
+# Здесь просто проверим возможность его запуска
+if command -v iperf3 &>/dev/null; then
+    echo "iperf3 is available. To test network bandwidth, run iperf3 -c <server_ip>"
+else
+    echo "iperf3 is not installed. Cannot test network performance."
+fi
+EOF
+
+    # Копируем скрипт на удаленный сервер и запускаем
+    scp /tmp/benchmark.sh "$SSH_USER@$server:/tmp/benchmark.sh"
+    run_remote "$server" "$role" "chmod +x /tmp/benchmark.sh && if command -v sysbench &>/dev/null && command -v fio &>/dev/null; then /tmp/benchmark.sh; else echo 'Benchmark tools not installed'; fi" "benchmarks.txt"
+    run_remote "$server" "$role" "rm -f /tmp/benchmark.sh" "cleanup.txt"
+    
+    log "Бенчмарки для $server завершены"
+}
+
+# Функция для анализа Java-приложений
+analyze_java_apps() {
+    local server="$1"
+    local role="$2"
+    
+    log "Анализ Java-приложений на $server ($role)"
+    
+    # Получаем список запущенных Java-процессов
+    run_remote "$server" "$role" "ps -ef | grep java | grep -v grep" "java_processes.txt"
+    
+    # Собираем информацию о JVM параметрах
+    run_remote "$server" "$role" "for pid in \$(ps -ef | grep java | grep -v grep | awk '{print \$2}'); do echo \"PID: \$pid\"; jcmd \$pid VM.flags 2>/dev/null || echo 'Cannot get JVM flags'; echo ''; done" "java_vm_flags.txt"
+
+    # Собираем информацию о heap использовании
+    run_remote "$server" "$role" "for pid in \$(ps -ef | grep java | grep -v grep | awk '{print \$2}'); do echo \"PID: \$pid\"; jcmd \$pid GC.heap_info 2>/dev/null || echo 'Cannot get heap info'; echo ''; done" "java_heap_info.txt"
+    
+    # Собираем информацию о классах
+    run_remote "$server" "$role" "for pid in \$(ps -ef | grep java | grep -v grep | awk '{print \$2}'); do echo \"PID: \$pid\"; jcmd \$pid VM.system_properties 2>/dev/null || echo 'Cannot get system properties'; echo ''; done" "java_system_props.txt"
+    
+    # Проверяем возможность сделать thread dump
+    run_remote "$server" "$role" "for pid in \$(ps -ef | grep java | grep -v grep | awk '{print \$2}'); do echo \"Thread dump for PID: \$pid\"; jcmd \$pid Thread.print 2>/dev/null || echo 'Cannot get thread dump'; echo ''; done" "java_thread_dumps.txt"
+    
+    # Проверяем GC логи
+    run_remote "$server" "$role" "for pid in \$(ps -ef | grep java | grep -v grep | awk '{print \$2}'); do echo \"GC logs for PID: \$pid\"; jcmd \$pid GC.class_stats 2>/dev/null || echo 'Cannot get GC stats'; echo ''; done" "java_gc_stats.txt"
+    
+    log "Анализ Java-приложений на $server завершен"
+}
+
+# Функция для анализа безопасности
+security_audit() {
+    local server="$1"
+    local role="$2"
+    
+    log "Анализ безопасности на $server ($role)"
+    
+    # Проверка открытых портов
+    run_remote "$server" "$role" "ss -tulpn" "security_open_ports.txt"
+    
+    # Проверка списка пользователей и групп
+    run_remote "$server" "$role" "cat /etc/passwd" "security_passwd.txt"
+    run_remote "$server" "$role" "cat /etc/group" "security_group.txt"
+    run_remote "$server" "$role" "cat /etc/sudoers.d/* 2>/dev/null || echo 'No sudoers.d files'" "security_sudoers.txt"
+    
+    # Проверка логинов и SSH доступа
+    run_remote "$server" "$role" "cat /etc/ssh/sshd_config" "security_sshd_config.txt"
+    run_remote "$server" "$role" "cat /var/log/secure | tail -n 500 || cat /var/log/auth.log | tail -n 500" "security_auth_log.txt"
+    
+    # Проверка прав на важные файлы
+    run_remote "$server" "$role" "ls -la /etc/shadow /etc/passwd /etc/group /etc/ssh/" "security_file_permissions.txt"
+    
+    # Проверка установленных пакетов безопасности
+    run_remote "$server" "$role" "dnf list installed | grep -E 'security|crypto|ssl|firewall'" "security_packages.txt"
+    
+    # Проверка последних обновлений безопасности
+    run_remote "$server" "$role" "dnf updateinfo list security" "security_updates.txt"
+    
+    # Проверка активных соединений
+    run_remote "$server" "$role" "netstat -na || ss -na" "security_connections.txt"
+    
+    # Проверка запущенных процессов
+    run_remote "$server" "$role" "ps -ef" "security_processes.txt"
+    
+    # Проверка логов аудита
+    run_remote "$server" "$role" "if command -v ausearch &>/dev/null; then ausearch -m avc -ts today || echo 'No audit logs for today'; else echo 'Audit system not installed'; fi" "security_audit_logs.txt"
+    
+    log "Анализ безопасности на $server завершен"
+}
+
+# Функция для анализа и рекомендаций по настройкам
+analyze_settings() {
+    local server="$1"
+    local role="$2"
+    
+    log "Анализ настроек на $server ($role)"
+    
+    # Создаем скрипт для анализа и рекомендаций
+    cat > /tmp/analyze.sh << 'EOF'
+#!/bin/bash
+
+echo "=== Анализ системных настроек ==="
+
+# Анализ CPU и параметров энергосбережения
+echo "=== CPU power management ==="
+if grep -q "performance" /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null; then
+    echo "GOOD: CPU governor установлен на performance"
+else
+    echo "RECOMMENDATION: Установите CPU governor на performance для улучшения производительности"
+    echo "  Выполните: echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor"
+fi
+
+# Анализ настроек памяти
+echo -e "\n=== Memory settings ==="
+SWAPPINESS=$(cat /proc/sys/vm/swappiness)
+if [ "$SWAPPINESS" -gt 10 ]; then
+    echo "RECOMMENDATION: Уменьшите swappiness до 1-10 для серверных рабочих нагрузок"
+    echo "  Выполните: echo 'vm.swappiness=10' >> /etc/sysctl.conf"
+else
+    echo "GOOD: Swappiness установлен на оптимальное значение: $SWAPPINESS"
+fi
+
+# Анализ лимитов открытых файлов
+echo -e "\n=== Open files limits ==="
+ULIMIT=$(ulimit -n)
+if [ "$ULIMIT" -lt 65535 ]; then
+    echo "RECOMMENDATION: Увеличьте лимит открытых файлов до 65535 или выше"
+    echo "  Добавьте в /etc/security/limits.conf строки:"
+    echo "  * soft nofile 65535"
+    echo "  * hard nofile 65535"
+else
+    echo "GOOD: Лимит открытых файлов установлен на достаточное значение: $ULIMIT"
+fi
+
+# Анализ настроек сети
+echo -e "\n=== Network settings ==="
+NET_BACKLOG=$(cat /proc/sys/net/core/somaxconn)
+if [ "$NET_BACKLOG" -lt 32768 ]; then
+    echo "RECOMMENDATION: Увеличьте размер очереди соединений (somaxconn) до 32768"
+    echo "  Выполните: echo 'net.core.somaxconn=32768' >> /etc/sysctl.conf"
+else
+    echo "GOOD: Размер очереди соединений установлен на оптимальное значение: $NET_BACKLOG"
+fi
+
+# Проверка размера буферов сети
+RMEM_MAX=$(cat /proc/sys/net/core/rmem_max)
+WMEM_MAX=$(cat /proc/sys/net/core/wmem_max)
+if [ "$RMEM_MAX" -lt 16777216 ] || [ "$WMEM_MAX" -lt 16777216 ]; then
+    echo "RECOMMENDATION: Увеличьте размер сетевых буферов до 16MB для 10GbE сети"
+    echo "  Выполните:"
+    echo "  echo 'net.core.rmem_max=16777216' >> /etc/sysctl.conf"
+    echo "  echo 'net.core.wmem_max=16777216' >> /etc/sysctl.conf"
+else
+    echo "GOOD: Размеры сетевых буферов установлены на оптимальные значения"
+fi
+
+# Анализ настроек дисков и I/O
+echo -e "\n=== Disk and I/O settings ==="
+for disk in $(lsblk -d -o NAME | grep -v NAME); do
+    SCHEDULER=$(cat /sys/block/$disk/queue/scheduler 2>/dev/null | grep -o "\[.*\]" | tr -d "[]")
+    if [ "$SCHEDULER" = "cfq" ] || [ "$SCHEDULER" = "mq-deadline" ]; then
+        echo "RECOMMENDATION: Для диска $disk рассмотрите использование scheduler none для SSD или mq-deadline для HDD"
+        echo "  Выполните: echo 'none' > /sys/block/$disk/queue/scheduler"
+    else
+        echo "GOOD: Диск $disk использует оптимальный scheduler: $SCHEDULER"
+    fi
+    
+    READAHEAD=$(cat /sys/block/$disk/queue/read_ahead_kb)
+    if [ "$READAHEAD" -lt 1024 ] && [[ "$disk" != *"sd"* ]]; then
+        echo "RECOMMENDATION: Увеличьте read_ahead для диска $disk до 1024-4096 для оптимальной производительности"
+        echo "  Выполните: echo 4096 > /sys/block/$disk/queue/read_ahead_kb"
+    fi
+done
+
+# Анализ настроек hugepages
+echo -e "\n=== Huge Pages settings ==="
+HUGE_PAGES=$(cat /proc/sys/vm/nr_hugepages)
+if [ "$HUGE_PAGES" -eq 0 ]; then
+    echo "RECOMMENDATION: Настройте Huge Pages для улучшения производительности приложений с большим объемом памяти"
+    echo "  Для расчета: выделите примерно 80% от оперативной памяти под приложения, разделите на 2048 KB"
+else
+    echo "GOOD: Huge Pages уже настроены: $HUGE_PAGES"
+fi
+
+# Анализ настроек file-max
+echo -e "\n=== File-max settings ==="
+FILE_MAX=$(cat /proc/sys/fs/file-max)
+if [ "$FILE_MAX" -lt 6553600 ]; then
+    echo "RECOMMENDATION: Увеличьте fs.file-max до 6553600 или выше"
+    echo "  Выполните: echo 'fs.file-max=6553600' >> /etc/sysctl.conf"
+else
+    echo "GOOD: fs.file-max установлен на достаточное значение: $FILE_MAX"
+fi
+
+# Анализ настроек для времени ожидания TIME_WAIT
+echo -e "\n=== TCP TIME_WAIT settings ==="
+TIME_WAIT_REUSE=$(cat /proc/sys/net/ipv4/tcp_tw_reuse)
+if [ "$TIME_WAIT_REUSE" -eq 0 ]; then
+    echo "RECOMMENDATION: Включите повторное использование сокетов в состоянии TIME_WAIT"
+    echo "  Выполните: echo 'net.ipv4.tcp_tw_reuse=1' >> /etc/sysctl.conf"
+else
+    echo "GOOD: Повторное использование сокетов в состоянии TIME_WAIT включено"
+fi
+
+# Анализ inode кэша
+echo -e "\n=== Inode cache settings ==="
+if [ -f /proc/sys/vm/vfs_cache_pressure ]; then
+    CACHE_PRESSURE=$(cat /proc/sys/vm/vfs_cache_pressure)
+    if [ "$CACHE_PRESSURE" -gt 50 ]; then
+        echo "RECOMMENDATION: Уменьшите vfs_cache_pressure для улучшения производительности файловой системы"
+        echo "  Выполните: echo 'vm.vfs_cache_pressure=50' >> /etc/sysctl.conf"
+    else
+        echo "GOOD: vfs_cache_pressure установлен на оптимальное значение: $CACHE_PRESSURE"
+    fi
+fi
+
+# Проверка прозрачных hugepages
+echo -e "\n=== Transparent Huge Pages settings ==="
+if [ -f /sys/kernel/mm/transparent_hugepage/enabled ]; then
+    THP=$(cat /sys/kernel/mm/transparent_hugepage/enabled | grep -o "\[.*\]" | tr -d "[]")
+    if [ "$THP" = "always" ]; then
+        echo "RECOMMENDATION: Отключите прозрачные Huge Pages для баз данных"
+        echo "  Выполните: echo never > /sys/kernel/mm/transparent_hugepage/enabled"
+        echo "  И добавьте в /etc/rc.local: echo never > /sys/kernel/mm/transparent_hugepage/enabled"
+    else
+        echo "GOOD: Прозрачные Huge Pages корректно настроены: $THP"
+    fi
+fi
+
+# Проверка наличия tuned профиля
+echo -e "\n=== Tuned profile ==="
+if command -v tuned-adm &>/dev/null; then
+    TUNED_PROFILE=$(tuned-adm active | awk -F': ' '{print $2}')
+    if [ "$TUNED_PROFILE" != "throughput-performance" ] && [ "$TUNED_PROFILE" != "latency-performance" ]; then
+        echo "RECOMMENDATION: Установите tuned профиль throughput-performance для серверных нагрузок"
+        echo "  Выполните: tuned-adm profile throughput-performance"
+    else
+        echo "GOOD: Tuned профиль установлен на оптимальное значение: $TUNED_PROFILE"
+    fi
+else
+    echo "RECOMMENDATION: Установите пакет tuned для оптимизации производительности"
+    echo "  Выполните: dnf install tuned"
+fi
+EOF
+
+    # Копируем скрипт на удаленный сервер и запускаем
+    scp /tmp/analyze.sh "$SSH_USER@$server:/tmp/analyze.sh"
+    run_remote "$server" "$role" "chmod +x /tmp/analyze.sh && /tmp/analyze.sh" "system_recommendations.txt"
+    run_remote "$server" "$role" "rm -f /tmp/analyze.sh" "cleanup.txt"
+    
+    log "Анализ настроек на $server завершен"
+}
+
+# Генерация отчета
+generate_report() {
+    log "Генерация итогового отчета"
+    
+    # Создаем директорию для отчета
+    REPORT_DIR="$OUT_DIR/report"
+    mkdir -p "$REPORT_DIR"
+    
+    # Создаем файл отчета
+    REPORT_FILE="$REPORT_DIR/audit_summary.md"
+    
+    echo "# Отчет о результатах аудита серверной инфраструктуры" > "$REPORT_FILE"
+    echo "Дата: $(date +'%Y-%m-%d %H:%M:%S')" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    
+    # Сводная информация о серверах
+    echo "## Сводная информация" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    echo "| Сервер | Роль | ОС | Ядро | CPU | RAM | Диски |" >> "$REPORT_FILE"
+    echo "|--------|------|----|----|-----|-----|-------|" >> "$REPORT_FILE"
+    
+    for server_info in "${SERVERS[@]}"; do
+        server=$(echo "$server_info" | cut -d: -f1)
+        role=$(echo "$server_info" | cut -d: -f2)
+        
+        # Извлекаем информацию из собранных данных
+        OS=$(cat "$OUT_DIR/$server/01_system_info.txt" 2>/dev/null | grep -i "Oracle Linux" | head -n 1 || echo "N/A")
+        KERNEL=$(cat "$OUT_DIR/$server/01_system_info.txt" 2>/dev/null | grep -i "Linux" | head -n 1 || echo "N/A")
+        CPU=$(cat "$OUT_DIR/$server/03_cpu_info.txt" 2>/dev/null | grep -i "model name" | head -n 1 | sed 's/.*: //g' || echo "N/A")
+        RAM=$(cat "$OUT_DIR/$server/04_memory_free.txt" 2>/dev/null | grep -i "Mem:" | awk '{print $2}' || echo "N/A")
+        DISKS=$(cat "$OUT_DIR/$server/05_lsblk.txt" 2>/dev/null | grep -i "disk" | wc -l || echo "N/A")
+        
+        echo "| $server | $role | $OS | $KERNEL | $CPU | $RAM | $DISKS |" >> "$REPORT_FILE"
+    done
+    
+    echo "" >> "$REPORT_FILE"
+    
+    # Секция с общими рекомендациями
+    echo "## Общие рекомендации по настройкам" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    
+    # Образец рекомендаций, которые можно дополнить на основе собранных данных
+    echo "### Системные настройки" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    echo "1. **Настройки ядра**" >> "$REPORT_FILE"
+    echo "   - Установите `vm.swappiness=10` для всех серверов" >> "$REPORT_FILE"
+    echo "   - Настройте сетевой стек для 10GbE сети: установите `net.core.rmem_max=16777216` и `net.core.wmem_max=16777216`" >> "$REPORT_FILE"
+    echo "   - Увеличьте лимиты открытых файлов: добавьте в `/etc/security/limits.conf` строки `* soft nofile 65535` и `* hard nofile 65535`" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    
+    echo "2. **Оптимизация дисковой подсистемы**" >> "$REPORT_FILE"
+    echo "   - Используйте планировщик `none` для SSD дисков" >> "$REPORT_FILE"
+    echo "   - Настройте опцию `noatime` для всех точек монтирования" >> "$REPORT_FILE"
+    echo "   - Увеличьте размер read_ahead до 4096 для больших последовательных чтений" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    
+    echo "3. **Настройки для баз данных**" >> "$REPORT_FILE"
+    echo "   - Отключите Transparent Huge Pages для серверов с ClickHouse и PostgreSQL" >> "$REPORT_FILE"
+    echo "   - Настройте huge pages для Java-приложений и баз данных" >> "$REPORT_FILE"
+    echo "   - Используйте опцию `data=writeback` для ext4 файловых систем на серверах баз данных" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    
+    # Секция с рекомендациями по компонентам
+    echo "## Рекомендации по компонентам" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    
+    echo "### ClickHouse" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    echo "1. **Оптимизация памяти**" >> "$REPORT_FILE"
+    echo "   - Установите `max_memory_usage` в 80% от доступной RAM" >> "$REPORT_FILE"
+    echo "   - Настройте `max_memory_usage_for_user` для предотвращения OOM при параллельных запросах" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    
+    echo "### PostgreSQL" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    echo "1. **Оптимизация памяти**" >> "$REPORT_FILE"
+    echo "   - Установите `shared_buffers` в 25% от доступной RAM" >> "$REPORT_FILE"
+    echo "   - Настройте `effective_cache_size` в 75% от доступной RAM" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    
+    echo "### Kubernetes" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    echo "1. **Оптимизация ресурсов**" >> "$REPORT_FILE"
+    echo "   - Настройте корректные resource requests и limits для всех подов" >> "$REPORT_FILE"
+    echo "   - Используйте PodDistruptionBudget для критичных сервисов" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    
+    echo "### Kafka" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    echo "1. **Оптимизация памяти**" >> "$REPORT_FILE"
+    echo "   - Настройте параметры JVM для оптимальной сборки мусора" >> "$REPORT_FILE"
+    echo "   - Используйте G1GC для больших heap размеров" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    
+    echo "### MinIO" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    echo "1. **Оптимизация производительности**" >> "$REPORT_FILE"
+    echo "   - Настройте правильное количество drives и erasure coding" >> "$REPORT_FILE"
+    echo "   - Используйте XFS для лучшей производительности" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    
+    echo "## Заключение" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+    echo "Данный отчет содержит базовые рекомендации на основе проведенного аудита. Для получения более детальных и специфичных рекомендаций необходим дополнительный анализ собранных данных и нагрузочное тестирование." >> "$REPORT_FILE"
+    
+    log "Отчет сгенерирован: $REPORT_FILE"
+}
+
+# Основная функция
+main() {
+    log "Начало аудита серверной инфраструктуры"
+    
+    # Проходим по всем серверам
+    for server_info in "${SERVERS[@]}"; do
+        server=$(echo "$server_info" | cut -d: -f1)
+        role=$(echo "$server_info" | cut -d: -f2)
+        
+        # Базовый аудит для всех серверов
+        audit_base_os "$server" "$role"
+        
+        # Специфический аудит в зависимости от роли
+        case $role in
+            clickhouse)
+                audit_clickhouse "$server"
+                ;;
+            postgres)
+                audit_postgres "$server"
+                ;;
+            minio)
+                audit_minio "$server"
+                ;;
+            kafka)
+                audit_kafka "$server"
+                ;;
+            k8s-master|k8s-worker)
+                audit_kubernetes "$server" "$role"
+                ;;
+        esac
+        
+        # Анализ Java-приложений для всех серверов
+        analyze_java_apps "$server" "$role"
+        
+        # Анализ безопасности для всех серверов
+        security_audit "$server" "$role"
+        
+        # Анализ и рекомендации по настройкам
+        analyze_settings "$server" "$role"
+        
+        # Запуск бенчмарков (если нужно)
+        # run_benchmarks "$server" "$role"
+    done
+    
+    # Генерация итогового отчета
+    generate_report
+    
+    log "Аудит завершен. Результаты доступны в директории: $OUT_DIR"
+    log "Итоговый отчет: $OUT_DIR/report/audit_summary.md"
+}
+
+# Запуск основной функции
+main
