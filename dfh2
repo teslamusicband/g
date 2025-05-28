@@ -1,0 +1,90 @@
+#!/bin/bash
+
+# Функция для преобразования вывода df -h в трёхколоночную таблицу
+transform_df_output() {
+    local input_file="$1"
+    local temp_file=$(mktemp)
+    
+    # Если файл не указан, читаем из stdin
+    if [[ -z "$input_file" ]]; then
+        cat > "$temp_file"
+        input_file="$temp_file"
+    fi
+    
+    # Читаем заголовок (первая строка)
+    local header_line=$(head -n 1 "$input_file")
+    
+    # Парсим заголовок, извлекаем названия колонок (кроме первой)
+    # Обрабатываем как русские, так и английские заголовки
+    local header_fields=()
+    local field_count=0
+    
+    # Разбиваем заголовок на поля, начиная со второго
+    while read -r field; do
+        if [[ -n "$field" ]]; then
+            header_fields+=("$field")
+            ((field_count++))
+        fi
+    done < <(echo "$header_line" | awk '{for(i=2;i<=NF;i++) print $i}')
+    
+    # Обрабатываем каждую строку данных (начиная со второй строки)
+    tail -n +2 "$input_file" | while IFS= read -r line; do
+        # Пропускаем пустые строки
+        [[ -z "$line" ]] && continue
+        
+        # Извлекаем filesystem (первое поле)
+        local filesystem=$(echo "$line" | awk '{print $1}')
+        
+        # Извлекаем значения остальных полей
+        local values=()
+        while read -r value; do
+            if [[ -n "$value" ]]; then
+                values+=("$value")
+            fi
+        done < <(echo "$line" | awk '{for(i=2;i<=NF;i++) print $i}')
+        
+        # Создаём строки для каждого параметра в новом формате
+        for i in "${!header_fields[@]}"; do
+            if [[ $i -lt ${#values[@]} ]]; then
+                echo "Файловая система $filesystem;${header_fields[$i]};${values[$i]}"
+            fi
+        done
+    done
+    
+    # Удаляем временный файл если он был создан
+    [[ "$input_file" == "$temp_file" ]] && rm -f "$temp_file"
+}
+
+# Функция для форматированного вывода (теперь просто выводим как есть)
+format_table() {
+    cat
+}
+
+# Основная логика скрипта
+main() {
+    if [[ $# -eq 0 ]]; then
+        # Если аргументы не переданы, выполняем df -h и обрабатываем результат
+        df -h | transform_df_output | format_table
+    elif [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+        echo "Использование: $0 [файл_с_выводом_df]"
+        echo "Преобразует вывод 'df -h' в формат с разделителями ;"
+        echo "Формат вывода: 'Файловая система NAME;PARAMETER;VALUE'"
+        echo ""
+        echo "Примеры:"
+        echo "  $0                    # Выполнить df -h и преобразовать"
+        echo "  df -h | $0           # Обработать вывод из pipe"
+        echo "  $0 df_output.txt     # Обработать файл"
+        exit 0
+    else
+        # Обрабатываем файл
+        if [[ -f "$1" ]]; then
+            transform_df_output "$1" | format_table
+        else
+            echo "Ошибка: файл '$1' не найден" >&2
+            exit 1
+        fi
+    fi
+}
+
+# Запускаем основную функцию
+main "$@"
