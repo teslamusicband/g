@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# Функция для преобразования вывода df -h в трёхколоночную таблицу
+transform_df_output() {
+    local input_file="$1"
+    
+    # Если файл не указан, читаем из stdin
+    if [[ -z "$input_file" ]]; then
+        input_file="/dev/stdin"
+    fi
+    
+    # Читаем первую строку (заголовок) и остальные строки отдельно
+    {
+        read -r header_line
+        cat
+    } < "$input_file" | {
+        # Парсим заголовок, извлекаем названия колонок (кроме первой - Filesystem)
+        # Удаляем первое поле (Filesystem) и разбиваем остальные
+        header_fields=($(echo "$header_line" | awk '{for(i=2;i<=NF;i++) print $i}'))
+        
+        echo "Filesystem|Parameter|Value"
+        echo "----------|---------|-----"
+        
+        # Обрабатываем каждую строку данных
+        while IFS= read -r line; do
+            # Пропускаем пустые строки
+            [[ -z "$line" ]] && continue
+            
+            # Извлекаем filesystem (первое поле)
+            filesystem=$(echo "$line" | awk '{print $1}')
+            
+            # Извлекаем значения остальных полей
+            values=($(echo "$line" | awk '{for(i=2;i<=NF;i++) print $i}'))
+            
+            # Создаём строки для каждого параметра
+            for i in "${!header_fields[@]}"; do
+                if [[ $i -lt ${#values[@]} ]]; then
+                    echo "$filesystem|${header_fields[$i]}|${values[$i]}"
+                fi
+            done
+            
+            # Добавляем разделитель между файловыми системами
+            echo ""
+        done
+    }
+}
+
+# Функция для форматированного вывода в виде таблицы
+format_table() {
+    column -t -s '|'
+}
+
+# Основная логика скрипта
+main() {
+    if [[ $# -eq 0 ]]; then
+        # Если аргументы не переданы, выполняем df -h и обрабатываем результат
+        df -h | transform_df_output | format_table
+    elif [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+        echo "Использование: $0 [файл_с_выводом_df]"
+        echo "Преобразует вывод 'df -h' в трёхколоночную таблицу"
+        echo ""
+        echo "Примеры:"
+        echo "  $0                    # Выполнить df -h и преобразовать"
+        echo "  df -h | $0           # Обработать вывод из pipe"
+        echo "  $0 df_output.txt     # Обработать файл"
+        exit 0
+    else
+        # Обрабатываем файл
+        if [[ -f "$1" ]]; then
+            transform_df_output "$1" | format_table
+        else
+            echo "Ошибка: файл '$1' не найден" >&2
+            exit 1
+        fi
+    fi
+}
+
+# Запускаем основную функцию
+main "$@"
