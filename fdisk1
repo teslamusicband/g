@@ -1,0 +1,82 @@
+#!/bin/bash
+
+echo "Устройство;Параметр;Значение"
+
+# Обработка физических дисков
+devices=$(lsblk -ndo NAME,TYPE | awk '$2=="disk" {print "/dev/"$1}')
+
+for device in $devices; do
+    dev_base=$(basename "$device")
+    model=$(cat /sys/block/$dev_base/device/model 2>/dev/null)
+    [[ -z "$model" ]] && model=$(udevadm info --query=all --name=$device | grep ID_MODEL= | cut -d= -f2-)
+    [[ -n "$model" ]] && echo "$device;Модель диска;$model"
+
+    size_line=$(fdisk -l 2>/dev/null | grep -E "^Disk $device:" | head -n1)
+    if [[ -n "$size_line" ]]; then
+        size=$(echo "$size_line" | cut -d: -f2 | cut -d',' -f1 | xargs)
+        echo "$device;Размер диска;$size"
+    fi
+
+    sector_line=$(fdisk -l $device 2>/dev/null | grep "Sector size" | head -n1)
+    if [[ -n "$sector_line" ]]; then
+        sectors=$(echo "$sector_line" | sed -E 's/.*logical\/physical: ([^ ]+ [^,]+).*/\1/')
+        echo "$device;Размер сектора (лог/физ);$sectors"
+    fi
+
+    io_size=$(cat /sys/block/$dev_base/queue/logical_block_size 2>/dev/null)
+    [[ -n "$io_size" ]] && echo "$device;Размер I/O (мин/опт);${io_size} байт / ${io_size} байт"
+
+    label=$(parted -s $device print 2>/dev/null | grep "Partition Table" | awk -F: '{print $2}' | xargs)
+    [[ -n "$label" ]] && echo "$device;Тип метки диска;$label"
+
+    disk_id=$(fdisk -l $device 2>/dev/null | grep "Disk identifier" | awk -F: '{print $2}' | xargs)
+    [[ -n "$disk_id" ]] && echo "$device;Идентификатор диска;$disk_id"
+
+    partitions=$(lsblk -ln $device | awk '$1 ~ /^[^ ]+p?[0-9]+/ {print $1, $4}')
+    while IFS= read -r part; do
+        part_name=$(echo "$part" | awk '{print $1}')
+        part_size=$(echo "$part" | awk '{print $2}')
+        echo "$device;Раздел /dev/$part_name;Размер $part_size"
+    done <<< "$partitions"
+done
+
+# Обработка LVM
+if command -v lvs &>/dev/null; then
+    lvs_output=$(lvs --noheadings -o vg_name,lv_name,lv_path,lv_size -S lv_attr!~^t 2>/dev/null | sed 's/^[ \t]*//')
+
+    while IFS= read -r line; do
+        vg=$(echo "$line" | awk '{print $1}')
+        lv=$(echo "$line" | awk '{print $2}')
+        path=$(echo "$line" | awk '{print $3}')
+        size=$(echo "$line" | awk '{print $4}')
+
+        echo "$path;Тип;LVM Logical Volume"
+        echo "$path;Volume Group;$vg"
+        echo "$path;Logical Volume;$lv"
+        echo "$path;Размер;$size"
+
+        fstype=$(blkid -s TYPE -o value "$path" 2>/dev/null)
+        [[ -n "$fstype" ]] && echo "$path;Файловая система;$fstype"
+
+        mountpoint=$(lsblk -no MOUNTPOINT "$path" 2>/dev/null | grep -v '^$')
+        [[ -n "$mountpoint" ]] && echo "$path;Монтирован в;$mountpoint"
+    done <<< "$lvs_output"
+fi
+
+# Обработка ZFS
+if command -v zfs &>/dev/null && command -v zpool &>/dev/null; then
+    zpool list -H -o name,size,alloc,free,health | while read -r pool size alloc free health; do
+        echo "$pool;Тип;ZFS Pool"
+        echo "$pool;Размер;$size"
+        echo "$pool;Использовано;$alloc"
+        echo "$pool;Свободно;$free"
+        echo "$pool;Состояние;$health"
+    done
+
+    zfs list -H -o name,used,avail,mountpoint,type | while read -r name used avail mnt type; do
+        echo "$name;Тип;$type"
+        echo "$name;Использовано;$used"
+        echo "$name;Доступно;$avail"
+        [[ "$mnt" != "-" ]] && echo "$name;Монтирован в;$mnt"
+    done
+fi
