@@ -1,0 +1,116 @@
+<svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+    </marker>
+    <linearGradient id="clientGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e3f2fd;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#bbdefb;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="serverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f3e5f5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e1bee7;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="800" fill="#f8f9fa"/>
+  
+  <!-- Title -->
+  <text x="600" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#333">
+    SSL Client Authentication: Keystore и Truststore
+  </text>
+  
+  <!-- Client side -->
+  <rect x="50" y="80" width="300" height="650" rx="10" fill="url(#clientGrad)" stroke="#1976d2" stroke-width="2"/>
+  <text x="200" y="110" text-anchor="middle" font-size="16" font-weight="bold" fill="#1976d2">
+    КЛИЕНТ (192.168.0.2)
+  </text>
+  
+  <!-- Client Keystore -->
+  <rect x="70" y="140" width="260" height="120" rx="5" fill="#fff" stroke="#4caf50" stroke-width="2"/>
+  <text x="200" y="165" text-anchor="middle" font-size="14" font-weight="bold" fill="#4caf50">
+    KEYSTORE (.jks)
+  </text>
+  <text x="80" y="185" font-size="12" fill="#333">• user.crt (клиентский сертификат)</text>
+  <text x="80" y="205" font-size="12" fill="#333">• user.key (приватный ключ)</text>
+  <text x="80" y="225" font-size="12" fill="#666">Для аутентификации себя</text>
+  <text x="80" y="245" font-size="12" fill="#666">перед сервером</text>
+  
+  <!-- Client Truststore -->
+  <rect x="70" y="280" width="260" height="100" rx="5" fill="#fff" stroke="#ff9800" stroke-width="2"/>
+  <text x="200" y="305" text-anchor="middle" font-size="14" font-weight="bold" fill="#ff9800">
+    TRUSTSTORE (.jks)
+  </text>
+  <text x="80" y="325" font-size="12" fill="#333">• ca.crt (CA сертификат)</text>
+  <text x="80" y="345" font-size="12" fill="#666">Для проверки сертификата</text>
+  <text x="80" y="365" font-size="12" fill="#666">сервера</text>
+  
+  <!-- Server side -->
+  <rect x="850" y="80" width="300" height="650" rx="10" fill="url(#serverGrad)" stroke="#7b1fa2" stroke-width="2"/>
+  <text x="1000" y="110" text-anchor="middle" font-size="16" font-weight="bold" fill="#7b1fa2">
+    СЕРВЕР (10.0.0.2)
+  </text>
+  
+  <!-- Server Keystore -->
+  <rect x="870" y="140" width="260" height="120" rx="5" fill="#fff" stroke="#4caf50" stroke-width="2"/>
+  <text x="1000" y="165" text-anchor="middle" font-size="14" font-weight="bold" fill="#4caf50">
+    KEYSTORE (.jks)
+  </text>
+  <text x="880" y="185" font-size="12" fill="#333">• server.crt (серверный сертификат)</text>
+  <text x="880" y="205" font-size="12" fill="#333">• server.key (приватный ключ)</text>
+  <text x="880" y="225" font-size="12" fill="#666">Для аутентификации себя</text>
+  <text x="880" y="245" font-size="12" fill="#666">перед клиентом</text>
+  
+  <!-- Server Truststore -->
+  <rect x="870" y="280" width="260" height="100" rx="5" fill="#fff" stroke="#ff9800" stroke-width="2"/>
+  <text x="1000" y="305" text-anchor="middle" font-size="14" font-weight="bold" fill="#ff9800">
+    TRUSTSTORE (.jks)
+  </text>
+  <text x="880" y="325" font-size="12" fill="#333">• ca.crt (CA сертификат)</text>
+  <text x="880" y="345" font-size="12" fill="#666">Для проверки клиентского</text>
+  <text x="880" y="365" font-size="12" fill="#666">сертификата</text>
+  
+  <!-- SSL Handshake Process -->
+  <text x="600" y="420" text-anchor="middle" font-size="16" font-weight="bold" fill="#333">
+    SSL HANDSHAKE ПРОЦЕСС
+  </text>
+  
+  <!-- Arrows and steps -->
+  <!-- Step 1 -->
+  <line x1="350" y1="450" x2="850" y2="450" stroke="#2196f3" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="600" y="445" text-anchor="middle" font-size="12" fill="#2196f3" font-weight="bold">1. Client Hello</text>
+  
+  <!-- Step 2 -->
+  <line x1="850" y1="480" x2="350" y2="480" stroke="#9c27b0" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="600" y="475" text-anchor="middle" font-size="12" fill="#9c27b0" font-weight="bold">2. Server Hello + Серверный сертификат</text>
+  
+  <!-- Step 3 -->
+  <rect x="70" y="500" width="260" height="60" rx="5" fill="#fff3e0" stroke="#ff9800" stroke-width="1" stroke-dasharray="5,5"/>
+  <text x="200" y="520" text-anchor="middle" font-size="11" fill="#e65100" font-weight="bold">ПРОВЕРКА НА КЛИЕНТЕ</text>
+  <text x="80" y="535" font-size="10" fill="#333">Truststore проверяет серверный</text>
+  <text x="80" y="550" font-size="10" fill="#333">сертификат через ca.crt</text>
+  
+  <!-- Step 4 -->
+  <line x1="350" y1="580" x2="850" y2="580" stroke="#4caf50" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="600" y="575" text-anchor="middle" font-size="12" fill="#4caf50" font-weight="bold">3. Клиентский сертификат (user.crt)</text>
+  
+  <!-- Step 5 -->
+  <rect x="870" y="600" width="260" height="60" rx="5" fill="#f3e5f5" stroke="#ff9800" stroke-width="1" stroke-dasharray="5,5"/>
+  <text x="1000" y="620" text-anchor="middle" font-size="11" fill="#e65100" font-weight="bold">ПРОВЕРКА НА СЕРВЕРЕ</text>
+  <text x="880" y="635" font-size="10" fill="#333">Truststore проверяет клиентский</text>
+  <text x="880" y="650" font-size="10" fill="#333">сертификат через ca.crt</text>
+  
+  <!-- Step 6 -->
+  <line x1="850" y1="680" x2="350" y2="680" stroke="#4caf50" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="600" y="675" text-anchor="middle" font-size="12" fill="#4caf50" font-weight="bold">4. Установка защищенного соединения</text>
+  
+  <!-- Legend -->
+  <rect x="400" y="710" width="400" height="70" rx="5" fill="#fff" stroke="#ccc" stroke-width="1"/>
+  <text x="600" y="730" text-anchor="middle" font-size="14" font-weight="bold" fill="#333">ПРОВЕРКИ</text>
+  <circle cx="420" cy="745" r="4" fill="#4caf50"/>
+  <text x="435" y="750" font-size="11" fill="#333">Keystore - аутентификация себя</text>
+  <circle cx="420" cy="765" r="4" fill="#ff9800"/>
+  <text x="435" y="770" font-size="11" fill="#333">Truststore - проверка других</text>
+  
+</svg>
