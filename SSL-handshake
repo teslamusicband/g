@@ -1,0 +1,45 @@
+Объясню разницу между keystore и truststore, а затем создам схему SSL-авторизации.
+
+## Keystore vs Truststore
+
+**Keystore** - содержит приватные ключи и соответствующие им сертификаты, которые принадлежат данному приложению. Используется для:
+- Аутентификации себя перед другими сторонами
+- Подписи данных
+- Расшифровки данных
+
+**Truststore** - содержит сертификаты доверенных сторон (обычно CA-сертификаты или публичные ключи). Используется для:
+- Проверки подлинности удаленных сторон
+- Валидации цепочки сертификатов
+- Установления доверия
+
+## Ваши файлы:
+- `ca.crt` → в truststore (сертификат удостоверяющего центра)
+- `user.crt` + `user.key` → в keystore (ваш клиентский сертификат и приватный ключ)## Команды для создания JKS-контейнеров:
+
+### 1. Создание Keystore (с вашим сертификатом и ключом):
+```bash
+# Сначала объединяем сертификат и ключ в PKCS12
+openssl pkcs12 -export -in user.crt -inkey user.key -out client-keystore.p12 -name "client"
+
+# Конвертируем в JKS
+keytool -importkeystore -srckeystore client-keystore.p12 -srcstoretype PKCS12 -destkeystore client-keystore.jks -deststoretype JKS
+```
+
+### 2. Создание Truststore (с CA-сертификатом):
+```bash
+keytool -import -alias ca-cert -file ca.crt -keystore client-truststore.jks -storepass changeit
+```
+
+## Основные моменты проверки:
+
+1. **Клиент проверяет сервер**: Truststore клиента содержит ca.crt для проверки серверного сертификата
+2. **Сервер проверяет клиента**: Truststore сервера содержит тот же ca.crt для проверки вашего user.crt
+3. **Взаимная аутентификация**: Оба используют свои Keystore для предоставления собственных сертификатов
+
+В Java-приложении вы будете указывать оба файла через системные свойства:
+```bash
+-Djavax.net.ssl.keyStore=client-keystore.jks
+-Djavax.net.ssl.keyStorePassword=your_password
+-Djavax.net.ssl.trustStore=client-truststore.jks  
+-Djavax.net.ssl.trustStorePassword=changeit
+```
