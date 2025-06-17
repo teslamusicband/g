@@ -1,0 +1,121 @@
+System;Account_Type;Account_Name;Category;Purpose;Related_Services;Namespace;Permissions;Storage_Location;How_to_Check
+OEL_9.4;OS_User;root;System;Superuser;All_systems;;Full_admin;/etc/passwd;getent passwd
+OEL_9.4;OS_User;bin;System;Basic_system_services;System_utilities;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;daemon;System;Basic_system_services;System_utilities;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;adm;System;Basic_system_services;System_utilities;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;lp;System;Printing;CUPS_printers;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;sync;System;System_operations;Power_management;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;shutdown;System;System_operations;Power_management;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;halt;System;System_operations;Power_management;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;mail;System;Mail_services;Sendmail_Postfix;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;operator;System;Specialized_roles;Operator_functions;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;games;System;Specialized_roles;Games;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;ftp;Network;FTP_server;FTP_services;;Network;/etc/passwd;getent passwd
+OEL_9.4;OS_User;nobody;System;Safe_user;Web_services_NFS;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;tss;Security;Trusted_Platform_Module;TPM_security;;Security;/etc/passwd;getent passwd
+OEL_9.4;OS_User;systemd-coredump;System;Core_dumps;systemd;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;dbus;System;D-Bus_message_bus;Inter_process_communication;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;polkitd;Security;PolicyKit;Authorization;;Security;/etc/passwd;getent passwd
+OEL_9.4;OS_User;rpc;Network;RPC_services;NFS_remote_calls;;Network;/etc/passwd;getent passwd
+OEL_9.4;OS_User;sssd;Authentication;System_Security_Services;LDAP_Active_Directory;;Authentication;/etc/passwd;getent passwd
+OEL_9.4;OS_User;rpcuser;Network;RPC_services;NFS_remote_calls;;Network;/etc/passwd;getent passwd
+OEL_9.4;OS_User;sshd;Network;SSH_daemon;Remote_access;;Network;/etc/passwd;getent passwd
+OEL_9.4;OS_User;chrony;System;Time_synchronization;NTP;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;systemd-oom;System;Out_of_Memory_killer;Memory_management;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;haproxy;Proxy_LB;Load_balancer;Load_balancing;;Proxy;/etc/passwd;getent passwd
+OEL_9.4;OS_User;tcpdump;Network;Traffic_analysis;Network_monitoring;;Network;/etc/passwd;getent passwd
+OEL_9.4;OS_User;apache;Web_Server;HTTP_server;Web_applications;;Web;/etc/passwd;getent passwd
+OEL_9.4;OS_User;clevis;Security;Automatic_decryption;LUKS_encryption;;Security;/etc/passwd;getent passwd
+OEL_9.4;OS_User;clickhouse;Database;ClickHouse_DBMS;Analytics_DB;;Database;/etc/passwd;getent passwd
+OEL_9.4;OS_User;clickhouse-bridge;Database;ClickHouse_bridge;ClickHouse_integration;;Database;/etc/passwd;getent passwd
+OEL_9.4;OS_User;cockpit-ws;Administration;Web_management_interface;Cockpit;;Administration;/etc/passwd;getent passwd
+OEL_9.4;OS_User;cockpit-wsinstance;Administration;Cockpit_instances;Cockpit;;Administration;/etc/passwd;getent passwd
+OEL_9.4;OS_User;dhcpd;Network;DHCP_server;IP_address_assignment;;Network;/etc/passwd;getent passwd
+OEL_9.4;OS_User;elasticsearch;Search_Analytics;Elasticsearch;ELK_Stack;;Search;/etc/passwd;getent passwd
+OEL_9.4;OS_User;etcd;Clustering;Distributed_key_value_store;Kubernetes_clusters;;Clustering;/etc/passwd;getent passwd
+OEL_9.4;OS_User;flatpak;System;Flatpak_applications;Application_sandbox;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;geoclue;System;Geolocation;Location_services;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;grafana;Monitoring;Metrics_visualization;Dashboards;;Monitoring;/etc/passwd;getent passwd
+OEL_9.4;OS_User;kafka;Queues;Message_broker;Apache_Kafka;;Queues;/etc/passwd;getent passwd
+OEL_9.4;OS_User;kibana;Analytics;Kibana_dashboard;ELK_Stack;;Analytics;/etc/passwd;getent passwd
+OEL_9.4;OS_User;libstoragemgmt;System;Storage_management;Storage_management;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;logstash;Analytics;Log_processing;ELK_Stack;;Analytics;/etc/passwd;getent passwd
+OEL_9.4;OS_User;minio-user;Storage;MinIO_object_storage;S3_compatible_storage;;Storage;/etc/passwd;getent passwd
+OEL_9.4;OS_User;mon;Monitoring;Monitoring_possibly_Ceph;Monitoring_systems;;Monitoring;/etc/passwd;getent passwd
+OEL_9.4;OS_User;mysql;Database;MySQL_MariaDB;Relational_DB;;Database;/etc/passwd;getent passwd
+OEL_9.4;OS_User;nginx;Web_Server;HTTP_reverse_proxy;Web_services;;Web;/etc/passwd;getent passwd
+OEL_9.4;OS_User;pipewire;System;Audio_video_server;Multimedia;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;postgres;Database;PostgreSQL;Relational_DB;;Database;/etc/passwd;getent passwd
+OEL_9.4;OS_User;rtkit;System;Real_time_kit;Audio_real_time;;System;/etc/passwd;getent passwd
+OEL_9.4;OS_User;setroubleshoot;Security;SELinux_troubleshooter;SELinux;;Security;/etc/passwd;getent passwd
+OEL_9.4;OS_User;squid;Proxy;HTTP_proxy;Caching_proxy;;Proxy;/etc/passwd;getent passwd
+OEL_9.4;OS_User;telegraf;Monitoring;Metrics_collection;InfluxDB_monitoring;;Monitoring;/etc/passwd;getent passwd
+OEL_9.4;OS_User;vaudit;Security;Audit_possibly_custom;Security_audit;;Security;/etc/passwd;getent passwd
+OEL_9.4;OS_User;zabbix;Monitoring;Zabbix_agent;Infrastructure_monitoring;;Monitoring;/etc/passwd;getent passwd
+OEL_9.4;OS_User;zabbixsrv;Monitoring;Zabbix_server;Monitoring_server;;Monitoring;/etc/passwd;getent passwd
+OEL_9.4;DB_User;postgres;Database;PostgreSQL_superuser;Database_administration;;Database_admin;PostgreSQL_DB;sudo -u postgres psql -c "\du"
+OEL_9.4;DB_User;app_users;Database;Application_users;Application_database_access;;Database_user;PostgreSQL_DB;sudo -u postgres psql -c "SELECT usename FROM pg_user;"
+OEL_9.4;DB_User;root;Database;MySQL_MariaDB_root;Database_administration;;Database_admin;MySQL_DB;mysql -u root -p -e "SELECT User Host FROM mysql.user;"
+OEL_9.4;DB_User;mysql_app_users;Database;MySQL_application_users;Application_database_access;;Database_user;MySQL_DB;mysql -u root -p -e "SELECT User Host FROM mysql.user;"
+OEL_9.4;DB_User;default;Database;ClickHouse_default;Analytics_database_access;;Database_user;ClickHouse_DB;clickhouse-client --query "SELECT name FROM system.users;"
+OEL_9.4;DB_User;clickhouse_custom_users;Database;ClickHouse_custom_users;Analytics_database_access;;Database_user;ClickHouse_DB;clickhouse-client --query "SELECT name FROM system.users;"
+OEL_9.4;LDAP_User;domain_users;Authentication;LDAP_Active_Directory_users;Domain_authentication;;Domain_user;LDAP_AD;getent passwd
+OEL_9.4;LDAP_User;service_accounts;Authentication;Service_accounts;Service_authentication;;Service_account;LDAP_AD;sss_cache -E
+OEL_9.4;Vault_User;vault_users;Security;HashiCorp_Vault_users;Secrets_management;;Vault_user;Vault;vault list auth/userpass/users
+OEL_9.4;Vault_Policy;vault_policies;Security;Vault_policies;Access_control;;Vault_policy;Vault;vault policy list
+OEL_9.4;Zabbix_User;zabbix_users;Monitoring;Zabbix_monitoring_users;Monitoring_access;;Monitoring_user;Zabbix_DB;mysql -u zabbix -p zabbix -e "SELECT alias name FROM users;"
+OEL_9.4;Grafana_User;grafana_users;Monitoring;Grafana_dashboard_users;Dashboard_access;;Dashboard_user;Grafana_DB;sqlite3 /var/lib/grafana/grafana.db "SELECT login email FROM user;"
+OEL_9.4;MinIO_User;minio_users;Storage;MinIO_object_storage_users;S3_storage_access;;Storage_user;MinIO;mc admin user list myminio
+OEL_9.4;Container_User;docker_users;Container;Docker_container_users;Container_access;;Container_user;Docker_containers;docker exec container_name cat /etc/passwd
+Talos_K8s;ServiceAccount;default;System;Default_service_account;All_pods;default_kube-system_etc;Minimal;K8s_API;kubectl get serviceaccounts --all-namespaces
+Talos_K8s;ServiceAccount;kube-proxy;System;Network_rules;iptables_management;kube-system;Network_admin;K8s_API;kubectl get serviceaccounts -n kube-system
+Talos_K8s;ServiceAccount;coredns;System;DNS_resolver;Configuration_reading;kube-system;DNS_admin;K8s_API;kubectl get serviceaccounts -n kube-system
+Talos_K8s;ServiceAccount;metrics-server;System;Metrics_collection;Pod_node_metrics;kube-system;Metrics_reader;K8s_API;kubectl get serviceaccounts -n kube-system
+Talos_K8s;ServiceAccount;kube-controller-manager;System;K8s_controllers;Resource_management;kube-system;Controller_admin;K8s_API;kubectl get serviceaccounts -n kube-system
+Talos_K8s;ServiceAccount;kube-scheduler;System;Pod_scheduler;Pod_node_assignment;kube-system;Scheduler_admin;K8s_API;kubectl get serviceaccounts -n kube-system
+Talos_K8s;ServiceAccount;etcd;System;State_storage;etcd_access;kube-system;etcd_admin;K8s_API;kubectl get serviceaccounts -n kube-system
+Talos_K8s;ServiceAccount;flannel;System;CNI_plugin;Network_settings;kube-system;Network_admin;K8s_API;kubectl get serviceaccounts -n kube-system
+Talos_K8s;ServiceAccount;talos-controller-manager;System;Talos_resource_management;Talos_resources;talos-system;Talos_admin;K8s_API;kubectl get serviceaccounts -n talos-system
+Talos_K8s;ServiceAccount;machine-controller-manager;System;Machine_management;Machine_control;machine-system;Machine_admin;K8s_API;kubectl get serviceaccounts -n machine-system
+Talos_K8s;ServiceAccount;cluster-autoscaler;System;Auto_scaling;Cluster_scaling;kube-system;Autoscale_admin;K8s_API;kubectl get serviceaccounts -n kube-system
+Talos_K8s;ServiceAccount;prometheus;Monitoring;Metrics_collection;Monitoring;monitoring;Metrics_admin;K8s_API;kubectl get serviceaccounts -n monitoring
+Talos_K8s;ServiceAccount;grafana;Monitoring;Visualization;Dashboards;monitoring;Dashboard_admin;K8s_API;kubectl get serviceaccounts -n monitoring
+Talos_K8s;ServiceAccount;alertmanager;Monitoring;Alerts;Alert_management;monitoring;Alert_admin;K8s_API;kubectl get serviceaccounts -n monitoring
+Talos_K8s;ServiceAccount;node-exporter;Monitoring;Node_metrics;Node_monitoring;monitoring;Node_metrics_reader;K8s_API;kubectl get serviceaccounts -n monitoring
+Talos_K8s;ServiceAccount;kube-state-metrics;Monitoring;K8s_resource_metrics;K8s_monitoring;monitoring;K8s_metrics_reader;K8s_API;kubectl get serviceaccounts -n monitoring
+Talos_K8s;ServiceAccount;fluent-bit;Logging;Log_collection;Log_shipping;logging;Log_reader;K8s_API;kubectl get serviceaccounts -n logging
+Talos_K8s;ServiceAccount;elasticsearch;Logging;Log_storage;Log_indexing;logging;Log_admin;K8s_API;kubectl get serviceaccounts -n logging
+Talos_K8s;ServiceAccount;kibana;Logging;Log_search;Log_visualization;logging;Log_search_admin;K8s_API;kubectl get serviceaccounts -n logging
+Talos_K8s;ServiceAccount;logstash;Logging;Log_processing;Log_transformation;logging;Log_processor;K8s_API;kubectl get serviceaccounts -n logging
+Talos_K8s;ServiceAccount;nginx-ingress;Ingress;HTTP_routing;Traffic_routing;ingress-nginx;Ingress_admin;K8s_API;kubectl get serviceaccounts -n ingress-nginx
+Talos_K8s;ServiceAccount;traefik;Ingress;Reverse_proxy;Traffic_routing;traefik;Proxy_admin;K8s_API;kubectl get serviceaccounts -n traefik
+Talos_K8s;ServiceAccount;cert-manager;Security;TLS_certificate_management;Certificate_automation;cert-manager;Certificate_admin;K8s_API;kubectl get serviceaccounts -n cert-manager
+Talos_K8s;ServiceAccount;external-dns;Network;DNS_record_management;DNS_automation;external-dns;DNS_admin;K8s_API;kubectl get serviceaccounts -n external-dns
+Talos_K8s;ServiceAccount;csi-driver;Storage;Container_Storage_Interface;Storage_management;kube-system;Storage_admin;K8s_API;kubectl get serviceaccounts -n kube-system
+Talos_K8s;ServiceAccount;local-path-provisioner;Storage;Local_storage;Local_volume_provisioning;local-path-storage;Local_storage_admin;K8s_API;kubectl get serviceaccounts -n local-path-storage
+Talos_K8s;ServiceAccount;rook-ceph-operator;Storage;Distributed_storage;Ceph_management;rook-ceph;Ceph_admin;K8s_API;kubectl get serviceaccounts -n rook-ceph
+Talos_K8s;ServiceAccount;vault;Security;Secret_management;Secret_automation;vault;Secret_admin;K8s_API;kubectl get serviceaccounts -n vault
+Talos_K8s;ServiceAccount;external-secrets;Security;External_secret_sync;Secret_synchronization;external-secrets;Secret_sync_admin;K8s_API;kubectl get serviceaccounts -n external-secrets
+Talos_K8s;ServiceAccount;falco;Security;Runtime_security;Security_monitoring;falco;Security_monitor;K8s_API;kubectl get serviceaccounts -n falco
+Talos_K8s;ServiceAccount;polaris;Security;Configuration_validation;Config_checking;polaris;Config_validator;K8s_API;kubectl get serviceaccounts -n polaris
+Talos_K8s;Pod_DB_User;postgres;Database;PostgreSQL_in_pod;Database_access;;Database_admin;Pod_database;kubectl exec -it postgresql-pod -- psql -U postgres -c "\du"
+Talos_K8s;Pod_DB_User;postgres_app_users;Database;PostgreSQL_app_users;Application_access;;Database_user;Pod_database;kubectl exec -it postgresql-pod -- psql -U postgres -c "\du"
+Talos_K8s;Pod_DB_User;root;Database;MySQL_MariaDB_in_pod;Database_access;;Database_admin;Pod_database;kubectl exec -it mysql-pod -- mysql -u root -p -e "SELECT User Host FROM mysql.user;"
+Talos_K8s;Pod_DB_User;mysql_app_users;Database;MySQL_app_users;Application_access;;Database_user;Pod_database;kubectl exec -it mysql-pod -- mysql -u root -p -e "SELECT User Host FROM mysql.user;"
+Talos_K8s;Pod_DB_User;admin;Database;MongoDB_in_pod;Database_access;;Database_admin;Pod_database;kubectl exec -it mongodb-pod -- mongo admin --eval "db.system.users.find()"
+Talos_K8s;Pod_DB_User;mongodb_app_users;Database;MongoDB_app_users;Application_access;;Database_user;Pod_database;kubectl exec -it mongodb-pod -- mongo admin --eval "db.system.users.find()"
+Talos_K8s;Pod_DB_User;default_user;Database;Redis_in_pod;Cache_access;;Database_user;Pod_database;kubectl exec -it redis-pod -- redis-cli CONFIG GET requirepass
+Talos_K8s;Pod_DB_User;clickhouse_users;Database;ClickHouse_in_pod;Analytics_access;;Database_user;Pod_database;kubectl exec -it clickhouse-pod -- clickhouse-client --query "SELECT name FROM system.users;"
+Talos_K8s;Web_App_User;admin;Application;CMS_admin_users;Content_management;;App_admin;Pod_application;Application_specific_queries
+Talos_K8s;Web_App_User;editors;Application;CMS_content_editors;Content_editing;;App_user;Pod_application;Application_specific_queries
+Talos_K8s;Web_App_User;users;Application;Application_users;Application_access;;App_user;Pod_application;Application_specific_queries
+Talos_K8s;Auth_User;ldap_users;Authentication;LDAP_users_in_pods;Authentication;;Auth_user;Pod_application;Application_specific_LDAP_queries
+Talos_K8s;Auth_User;oidc_users;Authentication;OIDC_users;Authentication;;Auth_user;External_provider;OIDC_provider_specific_queries
+Talos_K8s;CI_CD_User;jenkins_users;CI_CD;Jenkins_users;CI_CD_access;;CI_CD_user;Pod_application;kubectl exec -it jenkins-pod -- cat /var/jenkins_home/users/*/config.xml
+Talos_K8s;CI_CD_User;gitlab_users;CI_CD;GitLab_users;CI_CD_access;;CI_CD_user;Pod_application;kubectl exec -it gitlab-pod -- gitlab-rails console
+Talos_K8s;RBAC_User;cluster_admin_users;Security;Cluster_administrators;Full_cluster_access;;Cluster_admin;K8s_RBAC;kubectl get clusterrolebindings -o jsonpath='{range .items[?(@.roleRef.name=="cluster-admin")]}{.subjects[*].name}{"\n"}{end}'
+Talos_K8s;RBAC_User;namespace_admin_users;Security;Namespace_administrators;Namespace_access;;Namespace_admin;K8s_RBAC;kubectl get rolebindings --all-namespaces -o wide
+Talos_K8s;RBAC_User;readonly_users;Security;Read_only_users;Read_access;;Reader;K8s_RBAC;kubectl get clusterrolebindings | grep view
+Talos_K8s;Secret_User;vault_secrets;Security;Vault_secret_users;Secret_access;;Secret_user;K8s_Secret;kubectl get secrets --all-namespaces
+Talos_K8s;Secret_User;external_secret_users;Security;External_secret_users;External_secret_sync;;Secret_sync_user;External_system;kubectl get externalsecrets --all-namespaces
+Talos_K8s;Token_User;service_account_tokens;Security;ServiceAccount_tokens;API_access;;Token_user;K8s_Secret;kubectl get secrets --all-namespaces | grep token
