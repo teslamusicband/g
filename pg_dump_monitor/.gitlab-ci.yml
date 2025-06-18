@@ -1,0 +1,50 @@
+variables:
+  PROXY: "http://192.168.4.4:3128"
+  NEXUS_URL: "http://192.168.6.6:8081"
+  MAVEN_REPO_URL: "${NEXUS_URL}/repository/maven-releases/"
+  GRADLE_OPTS: "-Dhttp.proxyHost=192.168.4.4 -Dhttp.proxyPort=3128 -Dhttps.proxyHost=192.168.4.4 -Dhttps.proxyPort=3128"
+
+stages:
+  - build
+  - test
+  - deploy
+
+before_script:
+  - echo "Configuring environment"
+  - export HTTP_PROXY=${PROXY}
+  - export HTTPS_PROXY=${PROXY}
+
+build:
+  stage: build
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker build
+      --build-arg HTTP_PROXY=${PROXY}
+      --build-arg HTTPS_PROXY=${PROXY}
+      -t pgdump-monitor:${CI_COMMIT_SHORT_SHA} .
+    - docker run
+      -e GRADLE_OPTS="${GRADLE_OPTS}"
+      -v ${CI_PROJECT_DIR}/gradle.properties:/app/gradle.properties
+      pgdump-monitor:${CI_COMMIT_SHORT_SHA} ./gradlew build
+  artifacts:
+    paths:
+      - build/libs/*.jar
+    expire_in: 1 week
+
+deploy:
+  stage: deploy
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - docker run
+      -e GRADLE_OPTS="${GRADLE_OPTS}"
+      -v ${CI_PROJECT_DIR}/gradle.properties:/app/gradle.properties
+      pgdump-monitor:${CI_COMMIT_SHORT_SHA} ./gradlew publish
+  only:
+    - master
