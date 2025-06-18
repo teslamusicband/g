@@ -1,0 +1,67 @@
+Для мониторинга дополнительных портов (5000 и 5001, которые используются HAProxy) в вашем коде, необходимо внести изменения в несколько мест. Вот как это можно сделать:
+
+1. В классе `MonitorConfiguration` порты уже определены:
+```java
+public static final int POSTGRESQL_DEFAULT_PORT = 5432;
+public static final int HAPROXY_WRITE_PORT = 5000;
+public static final int HAPROXY_READ_PORT = 5001;
+```
+
+2. В классе `PgDumpProcessMonitor` нужно обновить метод `isPostgreSQLConnection`:
+```java
+private boolean isPostgreSQLConnection(NetworkConnection conn) {
+    // Проверяем стандартные порты PostgreSQL и HAProxy
+    if (conn.getRemotePort() == POSTGRESQL_DEFAULT_PORT || 
+        conn.getRemotePort() == HAPROXY_WRITE_PORT || 
+        conn.getRemotePort() == HAPROXY_READ_PORT) {
+        return true;
+    }
+    
+    // Проверяем известные хосты PostgreSQL
+    return postgresqlHosts.contains(conn.getRemoteAddress());
+}
+```
+
+3. В классе `AdvancedPgDumpDetector` метод `isPostgreSQLPort` уже корректно проверяет все порты:
+```java
+private boolean isPostgreSQLPort(int port) {
+    return port == MonitorConfiguration.POSTGRESQL_DEFAULT_PORT || 
+           port == MonitorConfiguration.HAPROXY_WRITE_PORT || 
+           port == MonitorConfiguration.HAPROXY_READ_PORT;
+}
+```
+
+4. Также убедитесь, что в конструкторе `PgDumpProcessMonitor` добавлены все необходимые хосты:
+```java
+public PgDumpProcessMonitor() {
+    // Добавляем известные хосты PostgreSQL и HAProxy
+    postgresqlHosts.add("10.0.1.10"); // patroni-01
+    postgresqlHosts.add("10.0.1.11"); // patroni-02  
+    postgresqlHosts.add("10.0.1.12"); // patroni-03
+    postgresqlHosts.add("10.0.1.5");  // HAProxy
+    postgresqlHosts.add("localhost");
+    postgresqlHosts.add("127.0.0.1");
+}
+```
+
+5. В методе `checkPostgreSQLConnections` класса `PgDumpProcessMonitor` можно добавить проверку портов HAProxy:
+```java
+private void checkPostgreSQLConnections() {
+    for (String host : postgresqlHosts) {
+        // Проверяем стандартный порт PostgreSQL
+        if (isPortOpen(host, POSTGRESQL_DEFAULT_PORT)) {
+            logger.debug("PostgreSQL service is active on " + host + ":" + POSTGRESQL_DEFAULT_PORT);
+        }
+        // Проверяем порт записи HAProxy
+        if (isPortOpen(host, HAPROXY_WRITE_PORT)) {
+            logger.debug("HAProxy write service is active on " + host + ":" + HAPROXY_WRITE_PORT);
+        }
+        // Проверяем порт чтения HAProxy
+        if (isPortOpen(host, HAPROXY_READ_PORT)) {
+            logger.debug("HAProxy read service is active on " + host + ":" + HAPROXY_READ_PORT);
+        }
+    }
+}
+```
+
+Эти изменения обеспечат мониторинг всех трех портов (5432, 5000 и 5001) в вашей системе. Код будет отслеживать подключения как к непосредственным узлам Patroni, так и к HAProxy.
