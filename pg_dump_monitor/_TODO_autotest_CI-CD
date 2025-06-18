@@ -1,0 +1,370 @@
+# CI/CD Pipeline для PgDumpProcessMonitor (GitLab CI)
+
+Создадим полноценный CI/CD пайплайн для сборки, тестирования и развертывания приложения мониторинга pg_dump.
+
+## 1. Файл `.gitlab-ci.yml`
+
+```yaml
+stages:
+  - build
+  - test
+  - package
+  - deploy
+
+variables:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+  DOCKER_DRIVER: overlay2
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME
+
+# Используем Docker-in-Docker (dind) для сборки
+services:
+  - docker:dind
+
+# Кэшируем Gradle зависимости
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .gradle
+    - build
+
+## Job-ы пайплайна
+
+build:
+  stage: build
+  image: gradle:7.6-jdk17
+  script:
+    - gradle assemble
+  artifacts:
+    paths:
+      - build/libs/*.jar
+    expire_in: 1 week
+
+unit-test:
+  stage: test
+  image: gradle:7.6-jdk17
+  script:
+    - gradle test
+  artifacts:
+    reports:
+      junit: build/test-results/test/**/*.xml
+    paths:
+      - build/reports/tests/test
+    expire_in: 1 week
+
+integration-test:
+  stage: test
+  image: gradle:7.6-jdk17
+  script:
+    - apt-get update && apt-get install -y strace lsof net-tools
+    - gradle integrationTest
+  dependencies:
+    - build
+  artifacts:
+    reports:
+      junit: build/test-results/integrationTest/**/*.xml
+    paths:
+      - build/reports/tests/integrationTest
+    expire_in: 1 week
+  only:
+    - master
+    - develop
+
+build-docker-image:
+  stage: package
+  image: docker:20.10
+  variables:
+    DOCKER_BUILDKIT: "1"
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $IMAGE_TAG .
+    - docker push $IMAGE_TAG
+  dependencies:
+    - build
+  only:
+    - master
+    - develop
+    - tags
+
+deploy-staging:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl config set-cluster k8s --server="$K8S_URL" --insecure-skip-tls-verify=true
+    - kubectl config set-credentials ci-user --token="$K8S_TOKEN"
+    - kubectl config set-context default --cluster=k8s --user=ci-user
+    - kubectl config use-context default
+    - kubectl set image deployment/pgdump-monitor pgdump-monitor=$IMAGE_TAG -n staging
+  environment:
+    name: staging
+    url: https://pgdump-monitor.staging.example.com
+  only:
+    - develop
+
+deploy-production:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl config set-cluster k8s --server="$K8S_URL" --insecure-skip-tls-verify=true
+    - kubectl config set-credentials ci-user --token="$K8S_TOKEN"
+    - kubectl config set-context default --cluster=k8s --user=ci-user
+    - kubectl config use-context default
+    - kubectl set image deployment/pgdump-monitor pgdump-monitor=$IMAGE_TAG -n production
+  environment:
+    name: production
+    url: https://pgdump-monitor.example.com
+  when: manual
+  only:
+    - master
+    - tags
+```
+
+## 2. Dockerfile для приложения
+
+```dockerfile
+# Сборка приложения
+FROM gradle:7.6-jdk17 AS builder
+WORKDIR /app
+COPY . .
+RUN gradle assemble --no-daemon
+
+# Финальный образ
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+
+# Копируем собранное приложение
+COPY --from=builder /app/build/libs/pgdump-monitor-*.jar /app/pgdump-monitor.jar
+
+# Устанавливаем необходимые утилиты для мониторинга
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    strace \
+    lsof \
+    net-tools && \
+    rm -rf /var/lib/apt/lists/*
+
+# Настройки безопасности
+RUN addgroup --system app && \
+    adduser --system --ingroup app app && \
+    chown -R app:app /app
+
+USER app
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/app/pgdump-monitor.jar"]
+```
+
+## 3. Настройка Gradle (build.gradle)
+
+```groovy
+plugins {
+    id 'java'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
+}
+
+group 'com.security.pgdump'
+version '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.slf4j:slf4j-api:2.0.7'
+    implementation 'ch.qos.logback:logback-classic:1.4.7'
+    
+    // Для работы с процессами
+    implementation 'org.apache.commons:commons-exec:1.3'
+    
+    // Тестирование
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+    testImplementation 'org.mockito:mockito-core:5.3.1'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.3.1'
+    testImplementation 'org.assertj:assertj-core:3.24.2'
+    
+    // Интеграционные тесты
+    testImplementation 'org.testcontainers:testcontainers:1.18.1'
+    testImplementation 'org.testcontainers:junit-jupiter:1.18.1'
+}
+
+application {
+    mainClass = 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+}
+
+task integrationTest(type: Test) {
+    useJUnitPlatform()
+    description = 'Runs integration tests.'
+    group = 'verification'
+    
+    filter {
+        includeTestsMatching "*IT"
+        includeTestsMatching "*IntegrationTest"
+    }
+    
+    shouldRunAfter test
+}
+
+check.dependsOn integrationTest
+
+shadowJar {
+    archiveBaseName.set('pgdump-monitor')
+    archiveClassifier.set('')
+    archiveVersion.set('')
+    mergeServiceFiles()
+}
+
+build.dependsOn shadowJar
+```
+
+## 4. Дополнительные настройки
+
+### .gitignore
+```
+.gradle/
+build/
+out/
+.idea/
+*.iml
+*.log
+*.swp
+*.bak
+*.jar
+*.war
+*.ear
+.DS_Store
+docker-compose.yml
+.env
+```
+
+### README.md с инструкциями
+```markdown
+# PostgreSQL Dump Monitor
+
+Мониторинг процессов pg_dump по поведенческим паттернам
+
+## Сборка и запуск
+
+### Локальная сборка
+```bash
+./gradlew build
+```
+
+### Запуск тестов
+```bash
+./gradlew test
+./gradlew integrationTest
+```
+
+### Сборка Docker образа
+```bash
+docker build -t pgdump-monitor .
+```
+
+### Запуск в Docker
+```bash
+docker run --rm -it --cap-add=SYS_PTRACE pgdump-monitor
+```
+
+## CI/CD Pipeline
+
+GitLab CI pipeline включает следующие этапы:
+1. Сборка (build)
+2. Юнит-тесты (unit-test)
+3. Интеграционные тесты (integration-test)
+4. Сборка Docker образа (build-docker-image)
+5. Развертывание в staging (deploy-staging)
+6. Развертывание в production (deploy-production) - manual
+```
+
+## 5. Дополнительные скрипты (опционально)
+
+### scripts/healthcheck.sh
+```bash
+#!/bin/bash
+
+# Проверка здоровья приложения
+RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
+
+if [ "$RESPONSE" -eq 200 ]; then
+    echo "Application is healthy"
+    exit 0
+else
+    echo "Application health check failed"
+    exit 1
+fi
+```
+
+### scripts/monitor-process.sh
+```bash
+#!/bin/bash
+
+# Мониторинг работы приложения
+PID=$(pgrep -f pgdump-monitor.jar)
+
+if [ -z "$PID" ]; then
+    echo "Process not found, restarting..."
+    nohup java -jar /app/pgdump-monitor.jar > /var/log/pgdump-monitor.log 2>&1 &
+else
+    echo "Process running with PID $PID"
+fi
+```
+
+## Как это работает
+
+1. **Сборка**:
+   - Используется Gradle для сборки Java-приложения
+   - Создается fat JAR с помощью shadowJar плагина
+
+2. **Тестирование**:
+   - Юнит-тесты проверяют отдельные компоненты
+   - Интеграционные тесты проверяют работу в среде, близкой к production
+   - Для интеграционных тестов устанавливаются необходимые системные утилиты (strace, lsof)
+
+3. **Упаковка**:
+   - Многоступенчатая сборка Docker образа
+   - В финальный образ добавляются необходимые системные утилиты
+   - Образ публикуется в registry
+
+4. **Развертывание**:
+   - В staging окружение развертывается автоматически
+   - В production - только после ручного подтверждения
+   - Используется Kubernetes для оркестрации
+
+## Особенности реализации
+
+1. **Безопасность**:
+   - В Docker образе создается отдельный пользователь
+   - Используются минимальные базовые образы
+   - Чувствительные данные (пароли, токены) передаются через переменные окружения
+
+2. **Производительность**:
+   - Кэширование Gradle зависимостей
+   - Использование BuildKit для ускорения сборки Docker образа
+   - Параллельное выполнение независимых job-ов
+
+3. **Мониторинг**:
+   - Готовые healthcheck скрипты
+   - Логирование в стандартные потоки вывода
+   - Интеграция с системами мониторинга Kubernetes
+
+Для работы пайплайна необходимо настроить в GitLab:
+1. Переменные окружения (CI/CD Settings -> Variables):
+   - CI_REGISTRY_USER
+   - CI_REGISTRY_PASSWORD
+   - K8S_URL
+   - K8S_TOKEN
+
+2. Docker registry (если используется встроенный GitLab registry)
+
+3. Kubernetes кластеры для staging и production окружений
