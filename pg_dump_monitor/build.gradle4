@@ -1,0 +1,100 @@
+Вы правы: `com.sun.management` и `com.sun.tools` входят в состав JDK и не требуют отдельного подключения через Gradle. Проблема возникает из-за попытки явно добавить их как зависимости. Вот исправленный `build.gradle` для сборки **fatJar** (исполняемого JAR со всеми зависимостями), который можно запускать в Linux через `bash`:
+
+---
+
+### `build.gradle` (исправленная версия)
+```groovy
+plugins {
+    id 'java'
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Логирование
+    implementation 'org.slf4j:slf4j-api:2.0.7'
+    implementation 'ch.qos.logback:logback-classic:1.4.8'
+    
+    // JSON (для расширения функционала алертов)
+    implementation 'com.google.code.gson:gson:2.10.1'
+}
+
+application {
+    mainClass = 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+// Сборка fatJar
+tasks.register('fatJar', Jar) {
+    archiveBaseName = 'pgdump-monitor'
+    archiveVersion = '1.0'
+    archiveClassifier = 'all'
+    
+    manifest {
+        attributes 'Main-Class': 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+    }
+    
+    from {
+        configurations.runtimeClasspath.collect { 
+            it.isDirectory() ? it : zipTree(it) 
+        }
+    }
+    with jar
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+```
+
+---
+
+### Как собрать и запустить:
+1. **Сборка fatJar**:
+   ```bash
+   ./gradlew fatJar
+   ```
+   Готовый JAR будет в папке `build/libs/` с именем `pgdump-monitor-1.0-all.jar`.
+
+2. **Запуск в Linux**:
+   ```bash
+   java -jar build/libs/pgdump-monitor-1.0-all.jar
+   ```
+
+---
+
+### Ключевые исправления:
+1. **Удалены ненужные зависимости**:
+   - `com.sun.management` и `com.sun.tools` исключены, так как они уже доступны в JDK.
+
+2. **Добавлен плагин `application`**:
+   - Упрощает настройку главного класса (`mainClass`).
+
+3. **Настроена задача `fatJar`**:
+   - Собирает JAR со всеми зависимостями (включая SLF4J, Logback и Gson).
+   - Указан `Main-Class` в манифесте для корректного запуска.
+
+4. **Обработка дубликатов**:
+   - `duplicatesStrategy = DuplicatesStrategy.EXCLUDE` избегает конфликтов при упаковке.
+
+---
+
+### Если код использует внутренние API JDK:
+Если в коде есть обращения к внутренним API (например, `com.sun.management.*`), убедитесь, что:
+- Используется **OpenJDK** (рекомендуется версия 11+).
+- В командной строке добавлены флаги для разрешения доступа к внутренним API (для Java 9+):
+  ```bash
+  java --add-opens java.base/java.lang=ALL-UNNAMED \
+       --add-opens java.base/sun.management=ALL-UNNAMED \
+       -jar pgdump-monitor-1.0-all.jar
+  ```
+
+---
+
+### Проверка работоспособности:
+1. Убедитесь, что `java -version` показывает версию **Java 8+**.
+2. Если возникают ошибки классов из `com.sun.*`, проверьте, что используете **Oracle JDK или OpenJDK** (не JRE).
