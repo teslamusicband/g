@@ -1,0 +1,113 @@
+Эти предупреждения возникают из-за того, что в проекте отсутствуют ресурсы (`/src/main/resources`) и дистрибутивные файлы (`/src/main/dist`), которые Gradle ожидает найти по умолчанию. Вот как это исправить:
+
+---
+
+### 1. **Создайте недостающие папки (если они нужны)**
+```bash
+mkdir -p src/main/resources  # Для ресурсов (конфиги, логи и т.д.)
+mkdir -p src/main/dist       # Для дистрибутивных файлов (скрипты, лицензии)
+```
+
+Если ресурсы не требуются, можно проигнорировать эти предупреждения, так как они не влияют на сборку `fatJar`.
+
+---
+
+### 2. **Исправленный `build.gradle`**
+Добавьте явное указание на отсутствие ресурсов и отключите ненужные задачи (`distTar`, `distZip`):
+
+```groovy
+plugins {
+    id 'java'
+    id 'application'
+}
+
+// Отключаем задачи создания tar/zip дистрибутивов (если они не нужны)
+tasks.distTar.enabled = false
+tasks.distZip.enabled = false
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.slf4j:slf4j-api:2.0.7'
+    implementation 'ch.qos.logback:logback-classic:1.4.8'
+    implementation 'com.google.code.gson:gson:2.10.1'
+}
+
+application {
+    mainClass = 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+}
+
+// Явно указываем, что ресурсов нет (если папка resources пуста)
+sourceSets.main.resources.srcDirs = []
+
+// Настройка fatJar
+tasks.register('fatJar', Jar) {
+    archiveBaseName = 'pgdump-monitor'
+    archiveVersion = '1.0'
+    archiveClassifier = 'all'
+    
+    manifest {
+        attributes 'Main-Class': 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+    }
+    
+    from {
+        configurations.runtimeClasspath.collect { 
+            it.isDirectory() ? it : zipTree(it) 
+        }
+    }
+    with jar
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+// Отключаем стандартные задачи, если они не нужны
+tasks.assemble.dependsOn fatJar
+tasks.build.dependsOn fatJar
+```
+
+---
+
+### 3. **Сборка и запуск**
+1. Соберите проект:
+   ```bash
+   ./gradlew clean fatJar
+   ```
+
+2. Проверьте, что JAR создан:
+   ```bash
+   ls -l build/libs/pgdump-monitor-1.0-all.jar
+   ```
+
+3. Запустите:
+   ```bash
+   java -jar build/libs/pgdump-monitor-1.0-all.jar
+   ```
+
+---
+
+### 4. **Дополнительные настройки (опционально)**
+- **Если ресурсы нужны**:  
+  Поместите файлы (например, `logback.xml`) в `src/main/resources`, и Gradle автоматически включит их в JAR.
+
+- **Для CI/CD (GitLab CI)**:
+  Добавьте в `.gitlab-ci.yml` этап сборки:
+  ```yaml
+  build:
+    image: gradle:jdk17
+    script:
+      - gradle clean fatJar
+    artifacts:
+      paths:
+        - build/libs/pgdump-monitor-1.0-all.jar
+  ```
+
+---
+
+### Почему это работает?
+- `sourceSets.main.resources.srcDirs = []` — явно указывает Gradle не искать ресурсы.
+- Отключение `distTar`/`distZip` — убирает ненужные задачи.
+- Задача `fatJar` собирает всё в один JAR, включая зависимости.
+
+Предупреждения больше не появятся, а `fatJar` будет создан корректно.
