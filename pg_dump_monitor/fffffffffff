@@ -1,0 +1,35 @@
+private void sendMetrics() {
+    try {
+        // Формируем метрики в формате Prometheus
+        String metrics = String.format(
+            "pg_dump_monitor_alert_active{host=\"%s\"} %d\n" +
+            "pg_dump_monitor_last_scan_time{host=\"%s\"} %d",
+            hostname,
+            alertActive ? 1 : 0,
+            hostname,
+            System.currentTimeMillis() / 1000
+        );
+
+        // Создаем HTTP соединение
+        URL url = new URL(VICTORIA_METRICS_URL);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
+        
+        // Отправляем данные
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(metrics.getBytes());
+            os.flush();
+        }
+        
+        // Проверяем ответ
+        int responseCode = conn.getResponseCode();
+        if (responseCode != 204 && responseCode != 200) {
+            log("ERROR", "Failed to send metrics. Response code: " + responseCode);
+        }
+        
+        conn.disconnect();
+    } catch (Exception e) {
+        log("ERROR", "Error sending metrics: " + e.getMessage());
+    }
+}
