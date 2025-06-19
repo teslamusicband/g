@@ -1,33 +1,31 @@
-Проблема в методе `checkNetworkConnections` - он возвращает `false` вместо `true` когда находит соединение на мониторируемом порту.
-
-Исправление:
-
-```java
-private boolean checkNetworkConnections(String pid, String command) {
+private void scanProcesses() {
     try {
-        Process proc = Runtime.getRuntime().exec("netstat -anp | grep " + pid);
+        // alertActive = false; // УБРАТЬ эту строку
+        Process proc = Runtime.getRuntime().exec("ps -eo pid,cmd --no-headers");
+        
+        boolean currentScanAlert = false; // Добавить локальную переменную
         
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                if (line.contains("ESTABLISHED")) {
-                    for (int port : MONITORED_PORTS) {
-                        if (line.contains(":" + port)) {
-                            sendAlert(pid, command, line);
-                            return true;  // Изменено с false на true
+                for (String pgDumpPath : PG_DUMP_PATHS) {
+                    if (line.contains(pgDumpPath)) {
+                        String pid = line.trim().split("\\s+")[0];
+                        if (checkNetworkConnections(pid, line)) {
+                            currentScanAlert = true;
                         }
+                        break;
                     }
                 }
             }
         }
+        
+        alertActive = currentScanAlert; // Установить значение после завершения сканирования
+        
     } catch (Exception e) {
-        log("ERROR", "Error checking network connections for PID " + pid + ": " + e.getMessage());
+        log("ERROR", "Error scanning processes: " + e.getMessage());
     }
-    return false;
 }
-```
-
-Теперь когда будет найдено активное соединение pg_dump на порту 5000 или 5432, метод вернет `true`, что установит `alertActive = true`, и в метрику `pg_dump_monitor_alert_active` будет отправлена единица.
 
 
 
