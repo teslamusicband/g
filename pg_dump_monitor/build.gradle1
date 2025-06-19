@@ -1,0 +1,88 @@
+plugins {
+    id 'application'
+    id 'java'
+    id 'maven-publish'
+}
+
+version = '0.0.1'
+group = 'my.soft.ware'
+description = 'pg_dump_monitor'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+application {
+    mainClass = 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Зависимости для работы с системой
+    implementation 'com.github.oshi:oshi-core:6.4.8'
+    implementation 'net.java.dev.jna:jna:5.13.0'
+    implementation 'net.java.dev.jna:jna-platform:5.13.0'
+    
+    // Логирование
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    implementation 'ch.qos.logback:logback-classic:1.4.14'
+    
+    // Тестирование
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// Конфигурация для создания Fat JAR
+jar {
+    archiveBaseName = 'pg-dump-monitor'
+    archiveVersion = '0.0.1'
+    archiveClassifier = 'fat'
+    
+    manifest {
+        attributes(
+            'Main-Class': 'com.security.pgdump.monitor.PgDumpProcessMonitor',
+            'Implementation-Title': project.name,
+            'Implementation-Version': project.version,
+            'Implementation-Vendor': 'Security Monitoring',
+            'Class-Path': configurations.runtimeClasspath.files.collect { it.getName() }.join(' ')
+        )
+    }
+    
+    // Включаем все зависимости в JAR (Fat JAR)
+    from {
+        configurations.runtimeClasspath.collect { 
+            it.isDirectory() ? it : zipTree(it) 
+        }
+    }
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    // Исключаем подписи из JAR файлов
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+}
+
+// Дополнительная задача для создания executable JAR
+task fatJar(type: Jar) {
+    archiveBaseName = project.name + '-all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes 'Main-Class': 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+    }
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    with jar
+}
+
+test {
+    useJUnitPlatform()
+}
+
+// Настройка для application plugin
+run {
+    standardInput = System.in
+}
