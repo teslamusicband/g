@@ -1,0 +1,51 @@
+Для работы приложенного кода вам понадобятся следующие зависимости в файле `build.gradle`. Вот полный список:
+
+```groovy
+plugins {
+    id 'java'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Основные зависимости
+    implementation 'org.slf4j:slf4j-api:2.0.7'
+    implementation 'ch.qos.logback:logback-classic:1.4.8'
+    
+    // Для работы с JSON (если будет использоваться)
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // Для работы с датами и временем (уже встроено в Java 8+)
+    
+    // Для работы с сетью и процессами
+    implementation 'com.sun.management:jdk.management:1.8.0' // Для OperatingSystemMXBean
+    
+    // Для тестирования (опционально)
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.3'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.3'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+```
+
+### Пояснения:
+1. **SLF4J и Logback** — для логирования (используется в `SecurityLogger`).
+2. **Gson** — для работы с JSON (если вы решите расширить функционал отправки алертов).
+3. **com.sun.management** — для доступа к `OperatingSystemMXBean` (мониторинг ресурсов системы).
+4. **JUnit** — для тестирования (опционально).
+
+### Дополнительно:
+- Код использует Java 8+ API (например, `ProcessHandle`), поэтому убедитесь, что в `build.gradle` указана соответствующая версия Java:
+  ```groovy
+  java {
+      toolchain {
+          languageVersion = JavaLanguageVersion.of(11) // Или другой версии >= 8
+      }
+  }
+  ```
+
+Если планируется интеграция с внешними системами (например, Slack или SIEM), добавьте соответствующие зависимости (например, `com.slack.api:slack-api-client`).
