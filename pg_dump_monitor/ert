@@ -1,0 +1,66 @@
+Проблема в методе `checkNetworkConnections` - он возвращает `false` вместо `true` когда находит соединение на мониторируемом порту.
+
+Исправление:
+
+```java
+private boolean checkNetworkConnections(String pid, String command) {
+    try {
+        Process proc = Runtime.getRuntime().exec("netstat -anp | grep " + pid);
+        
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.contains("ESTABLISHED")) {
+                    for (int port : MONITORED_PORTS) {
+                        if (line.contains(":" + port)) {
+                            sendAlert(pid, command, line);
+                            return true;  // Изменено с false на true
+                        }
+                    }
+                }
+            }
+        }
+    } catch (Exception e) {
+        log("ERROR", "Error checking network connections for PID " + pid + ": " + e.getMessage());
+    }
+    return false;
+}
+```
+
+Теперь когда будет найдено активное соединение pg_dump на порту 5000 или 5432, метод вернет `true`, что установит `alertActive = true`, и в метрику `pg_dump_monitor_alert_active` будет отправлена единица.
+
+
+
+
+
+
+
+
+
+
+Да, это хорошее решение. Вот исправление для унификации интервалов:
+
+```java
+private static final long SCAN_INTERVAL = 1000; // Изменено с 5000 на 1000
+private static final long METRICS_INTERVAL = 1000; // 1 second - оставляем как есть
+```
+
+Или еще лучше - использовать одну константу для обоих интервалов:
+
+```java
+private static final long MONITORING_INTERVAL = 1000; // 1 second
+
+public void startMonitoring() {
+    try {
+        hostname = java.net.InetAddress.getLocalHost().getHostName();
+    } catch (Exception e) {
+        hostname = "unknown";
+    }
+    
+    log("INFO", "Starting pg_dump monitoring on host: " + hostname);
+    scheduler.scheduleAtFixedRate(this::scanProcesses, 0, MONITORING_INTERVAL, TimeUnit.MILLISECONDS);
+    scheduler.scheduleAtFixedRate(this::sendMetrics, 0, MONITORING_INTERVAL, TimeUnit.MILLISECONDS);
+}
+```
+
+Это решит проблему рассинхронизации между сканированием процессов и отправкой метрик. Теперь оба действия будут выполняться каждую секунду, и метрика будет отражать актуальное состояние `alertActive`.
