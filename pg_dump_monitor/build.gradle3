@@ -1,0 +1,97 @@
+plugins {
+    id 'application'
+    id 'java'
+    id 'maven-publish'
+}
+
+group = 'my.soft.ware'
+version = '1.0.0'
+description = 'pg_dump_monitor'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+application {
+    mainClass = 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+}
+
+// Конфигурация для создания исполняемого JAR
+jar {
+    archiveBaseName = 'pg-dump-monitor'
+    archiveVersion = '1.0.0'
+    
+    manifest {
+        attributes(
+            'Main-Class': 'com.security.pgdump.monitor.PgDumpProcessMonitor',
+            'Implementation-Title': project.name,
+            'Implementation-Version': project.version,
+            'Implementation-Vendor': 'Security Monitoring'
+        )
+    }
+    
+    // Включаем все зависимости в JAR (Fat JAR), исключая JDK классы
+    from {
+        configurations.runtimeClasspath.collect { 
+            it.isDirectory() ? it : zipTree(it) 
+        }.findAll { 
+            !it.toString().contains('jdk.management') && 
+            !it.toString().contains('tools.jar')
+        }
+    }
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    // Исключаем META-INF подписи
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+}
+
+// Альтернативная задача для создания Fat JAR
+task fatJar(type: Jar) {
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    manifest {
+        attributes 'Main-Class': 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+    }
+    
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    with jar
+}
+
+// Задача для создания исполняемого скрипта
+task createExecutable(type: Copy) {
+    from 'src/main/scripts'
+    into 'build/scripts'
+    fileMode = 0755
+}
+
+// Зависимости
+dependencies {
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation 'ch.qos.logback:logback-classic:1.2.12'
+    
+    // Исключаем JDK внутренние API из classpath
+    compileOnly 'com.sun:tools:1.8.0'
+}
+
+// Конфигурация для публикации
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+        }
+    }
+}
+
+// Задача для запуска с аргументами
+task runMonitor(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+    
+    // Добавьте аргументы если нужно
+    // args = ['--config', 'config.properties']
+}
