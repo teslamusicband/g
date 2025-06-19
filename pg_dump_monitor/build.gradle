@@ -1,0 +1,31 @@
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+application {
+    mainClass = 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+}
+
+// Конфигурация для создания исполняемого JAR
+jar {
+    archiveBaseName = 'pg-dump-monitor'
+    archiveVersion = '1.0.0'
+    
+    manifest {
+        attributes(
+            'Main-Class': 'com.security.pgdump.monitor.PgDumpProcessMonitor',
+            'Implementation-Title': project.name,
+            'Implementation-Version': project.version,
+            'Implementation-Vendor': 'Security Monitoring'
+        )
+    }
+    
+    // Включаем все зависимости в JAR (Fat JAR)
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
