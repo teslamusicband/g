@@ -1,0 +1,20 @@
+log:
+  # Уровень логирования (DEBUG - максимальная детализация)
+  level: DEBUG
+  # Формат логов
+  format: '%(asctime)s %(levelname)s: %(message)s'
+  # Включение логирования в файл
+  file: /var/log/patroni.log
+  # Размер файла перед ротацией (в байтах)
+  max_size: 10485760  # 10MB
+  # Количество сохраняемых файлов логов
+  backup_count: 5
+  # Дополнительные настройки
+  dir: /var/log/patroni
+  loggers:
+    patroni: DEBUG
+    urllib3: DEBUG
+    requests: DEBUG
+    pg8000: DEBUG
+    kazoo: DEBUG
+    etcd: DEBUG
