@@ -1,0 +1,165 @@
+Вот полный `build.gradle` с поддержкой Java 17 и конфигурацией для создания **fatJar** (исполняемого JAR со всеми зависимостями), который можно использовать в Docker:
+
+```groovy
+plugins {
+    id 'java'
+    id 'jacoco'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'com.security.pgdump'
+version = '1.0.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Основные зависимости (если есть)
+    // implementation 'some.dependency:version'
+
+    // Тестовые зависимости
+    testImplementation platform('org.junit:junit-bom:5.9.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter-api'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+    
+    testImplementation 'org.mockito:mockito-core:5.2.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.2.0'
+    testImplementation 'org.mockito:mockito-inline:5.2.0'
+    
+    testImplementation 'net.bytebuddy:byte-buddy:1.14.5'
+    testImplementation 'org.apache.commons:commons-lang3:3.12.0'
+}
+
+application {
+    mainClass = 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+}
+
+test {
+    useJUnitPlatform()
+    
+    jvmArgs = [
+        '--add-opens=java.base/java.lang=ALL-UNNAMED',
+        '--add-opens=java.base/java.net=ALL-UNNAMED',
+        '--add-opens=java.base/java.io=ALL-UNNAMED'
+    ]
+    
+    systemProperties = [
+        'junit.jupiter.execution.parallel.enabled': 'true'
+    ]
+    
+    maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
+}
+
+jacoco {
+    toolVersion = "0.8.8"
+}
+
+jacocoTestReport {
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, excludes: ['**/Main*'])
+        }))
+    }
+}
+
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.85
+            }
+            limit {
+                counter = 'BRANCH'
+                value = 'COVEREDRATIO'
+                minimum = 0.80
+            }
+        }
+    }
+}
+
+check.dependsOn jacocoTestCoverageVerification
+
+shadowJar {
+    archiveBaseName = 'pgdump-monitor'
+    archiveClassifier = 'fat'
+    mergeServiceFiles()
+    manifest {
+        attributes 'Main-Class': 'com.security.pgdump.monitor.PgDumpProcessMonitor'
+    }
+}
+
+tasks.build.dependsOn tasks.shadowJar
+```
+
+### Ключевые изменения для Docker-сборки:
+
+1. **Добавлен плагин `shadow`** для создания fatJar
+2. **Конфигурация `application`** с указанием главного класса
+3. **Настройка `shadowJar`**:
+   - Имя выходного файла: `pgdump-monitor-fat.jar`
+   - Включение service-файлов (для совместимости с некоторыми библиотеками)
+   - Явное указание Main-Class в манифесте
+
+### Как использовать:
+
+1. Сборка fatJar:
+   ```bash
+   ./gradlew shadowJar
+   ```
+   Результат будет в: `build/libs/pgdump-monitor-fat.jar`
+
+2. Пример Dockerfile:
+   ```dockerfile
+   FROM eclipse-temurin:17-jre-jammy
+   
+   WORKDIR /app
+   COPY build/libs/pgdump-monitor-fat.jar /app/app.jar
+   
+   ENTRYPOINT ["java", "-jar", "app.jar"]
+   ```
+
+3. Сборка и запуск в Docker:
+   ```bash
+   docker build -t pgdump-monitor .
+   docker run -it --rm pgdump-monitor
+   ```
+
+### Дополнительные настройки (по желанию):
+
+Если нужно исключить некоторые зависимости из fatJar:
+```groovy
+shadowJar {
+    dependencies {
+        exclude(dependency('org.apache.logging.log4j:log4j-core:.*'))
+    }
+}
+```
+
+Для оптимизации размера JAR:
+```groovy
+tasks.withType(com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    minimize()
+}
+```
+
+Этот конфиг:
+- Полностью совместим с Java 17
+- Создает самодостаточный исполняемый JAR
+- Готов к использованию в Docker-контейнерах
+- Сохраняет все тестовые возможности
