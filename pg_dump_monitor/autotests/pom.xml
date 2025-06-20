@@ -5,7 +5,28 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
     
+    <repositories>
+        <repository>
+            <id>central</id>
+            <name>Maven Central Repository</name>
+            <url>https://repo1.maven.org/maven2</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <!-- JUnit 5 пример -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
+
+
     <groupId>com.security.pgdump</groupId>
     <artifactId>pgdump-monitor</artifactId>
     <version>1.0.0</version>
