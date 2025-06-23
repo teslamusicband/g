@@ -1,0 +1,105 @@
+Для Python 3.13.5 код нужно немного подкорректировать, поскольку `ssl.OP_LEGACY_SERVER_CONNECT` был добавлен в более поздних версиях OpenSSL, а некоторые методы работы с SSL контекстом изменились:
+
+## Вариант 1: Оптимизированный для Python 3.13.5
+
+```python
+import ssl
+from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+
+# Создать менее строгий SSL контекст
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False  # Отключить проверку hostname
+ssl_context.verify_mode = ssl.CERT_REQUIRED  # Но оставить проверку сертификата
+
+# Отключить строгие проверки (совместимо с Python 3.13.5)
+try:
+    # Попробовать новый способ для OpenSSL 3.x
+    ssl_context.options |= ssl.OP_LEGACY_SERVER_CONNECT
+except AttributeError:
+    # Fallback для случаев, когда флаг недоступен
+    pass
+
+# Дополнительные настройки для совместимости
+ssl_context.options |= ssl.OP_NO_SSLv2
+ssl_context.options |= ssl.OP_NO_SSLv3
+ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+
+producer = AIOKafkaProducer(
+    bootstrap_servers=['kafka:9093'],
+    security_protocol='SASL_SSL',
+    sasl_mechanism='SCRAM-SHA-256',
+    sasl_plain_username='username',
+    sasl_plain_password='password',
+    ssl_context=ssl_context
+)
+```
+
+## Вариант 1a: Альтернативный способ для Python 3.13.5
+
+```python
+import ssl
+from aiokafka import AIOKafkaProducer
+
+# Создать базовый SSL контекст без строгих проверок
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_REQUIRED
+
+# Загрузить CA сертификат (если есть отдельный файл)
+# ssl_context.load_verify_locations('/path/to/ca.pem')
+
+# Для Python 3.13.5 можно использовать параметр максимальной совместимости
+ssl_context.maximum_version = ssl.TLSVersion.TLSv1_3  # Поддержка новых версий TLS
+ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2  # Минимальная безопасность
+
+producer = AIOKafkaProducer(
+    bootstrap_servers=['kafka:9093'],
+    security_protocol='SASL_SSL',
+    sasl_mechanism='SCRAM-SHA-256',
+    sasl_plain_username='username',
+    sasl_plain_password='password',
+    ssl_context=ssl_context
+)
+```
+
+## Вариант 1b: Максимально простой для Python 3.13.5
+
+```python
+import ssl
+from aiokafka import AIOKafkaProducer
+
+# Самый простой способ - отключить проверку hostname и использовать дефолтный контекст
+ssl_context = ssl._create_unverified_context()  # Создает контекст без строгих проверок
+
+producer = AIOKafkaProducer(
+    bootstrap_servers=['kafka:9093'],
+    security_protocol='SASL_SSL',
+    sasl_mechanism='SCRAM-SHA-256',
+    sasl_plain_username='username',
+    sasl_plain_password='password',
+    ssl_context=ssl_context
+)
+```
+
+## Проверка совместимости
+
+Добавьте этот код для диагностики:
+
+```python
+import ssl
+print(f"Python SSL version: {ssl.OPENSSL_VERSION}")
+print(f"Available SSL options: {[attr for attr in dir(ssl) if attr.startswith('OP_')]}")
+
+# Проверить, какие атрибуты доступны
+if hasattr(ssl, 'OP_LEGACY_SERVER_CONNECT'):
+    print("OP_LEGACY_SERVER_CONNECT доступен")
+else:
+    print("OP_LEGACY_SERVER_CONNECT НЕ доступен, используем альтернативный подход")
+```
+
+**Рекомендация для Python 3.13.5**: Начните с **Варианта 1**, если получите ошибку с `OP_LEGACY_SERVER_CONNECT`, переходите к **Варианту 1a**. Вариант 1b используйте только если первые два не работают.
+
+Основные изменения для Python 3.13.5:
+- Добавлена проверка доступности `OP_LEGACY_SERVER_CONNECT`
+- Явно указаны минимальная и максимальная версии TLS
+- Добавлен fallback для случаев несовместимости
