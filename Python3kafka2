@@ -1,0 +1,162 @@
+Вот исправленные варианты с правильными расширениями файлов:
+
+## Вариант 1: Используя .crt и .key файлы
+
+```python
+import os
+import ssl
+from aiokafka import AIOKafkaProducer
+
+# Создаем временный конфиг OpenSSL
+openssl_conf_content = """
+openssl_conf = openssl_init
+
+[openssl_init]
+ssl_conf = ssl_sect
+
+[ssl_sect]
+system_default = system_default_sect
+
+[system_default_sect]
+Options = -x509_strict
+"""
+
+# Записываем во временный файл
+with open('/tmp/custom_openssl.conf', 'w') as f:
+    f.write(openssl_conf_content)
+
+# Устанавливаем переменную окружения
+os.environ['OPENSSL_CONF'] = '/tmp/custom_openssl.conf'
+
+# Создаем SSL контекст
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = True  # FQDN проверка остается
+ssl_context.verify_mode = ssl.CERT_REQUIRED
+
+# Загружаем CA сертификат из .crt файла
+ssl_context.load_verify_locations('/path/to/trust-ca.crt')
+
+# Если нужна клиентская аутентификация (mTLS)
+ssl_context.load_cert_chain('/path/to/client-cert.crt', '/path/to/client-cert.key')
+
+producer = AIOKafkaProducer(
+    bootstrap_servers=['kafka:9093'],
+    security_protocol='SASL_SSL',
+    sasl_mechanism='SCRAM-SHA-256',
+    sasl_username='username',
+    sasl_password='password',
+    ssl_context=ssl_context
+)
+```
+
+## Вариант 2: Через параметры aiokafka с .crt/.key файлами
+
+```python
+import os
+from aiokafka import AIOKafkaProducer
+
+# Настройка OpenSSL для менее строгих проверок
+os.environ['OPENSSL_CONF'] = '/tmp/custom_openssl.conf'
+
+producer = AIOKafkaProducer(
+    bootstrap_servers=['kafka:9093'],
+    security_protocol='SASL_SSL',
+    sasl_mechanism='SCRAM-SHA-256',
+    sasl_username='username',
+    sasl_password='password',
+    # Указываем файлы сертификатов
+    ssl_cafile='/path/to/trust-ca.crt',              # CA trust сертификат
+    ssl_certfile='/path/to/client-cert.crt',         # Клиентский сертификат (если нужен)
+    ssl_keyfile='/path/to/client-cert.key',          # Ключ клиентского сертификата (если нужен)
+    ssl_check_hostname=True,                         # Проверка FQDN остается
+)
+```
+
+## Вариант 3: Минимальный без клиентского сертификата
+
+```python
+import ssl
+from aiokafka import AIOKafkaProducer
+
+# Создаем SSL контекст
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ssl_context.check_hostname = True
+ssl_context.verify_mode = ssl.CERT_REQUIRED
+
+# Загружаем только CA для проверки сервера
+ssl_context.load_verify_locations('/path/to/trust-ca.crt')
+
+# Отключаем строгие проверки если доступно
+try:
+    ssl_context.options |= ssl.OP_LEGACY_SERVER_CONNECT
+except AttributeError:
+    ssl_context.options |= ssl.OP_NO_COMPRESSION
+
+producer = AIOKafkaProducer(
+    bootstrap_servers=['kafka:9093'],
+    security_protocol='SASL_SSL',
+    sasl_mechanism='SCRAM-SHA-256',
+    sasl_username='username',
+    sasl_password='password',
+    ssl_context=ssl_context
+)
+```
+
+## Вариант 4: Использование Java keystores (через конвертацию)
+
+```python
+import subprocess
+import ssl
+from aiokafka import AIOKafkaProducer
+
+# Конвертируем truststore в PEM формат для использования в Python
+def convert_truststore_to_crt(truststore_path, password, output_crt):
+    """Конвертирует .truststore в .crt файл"""
+    cmd = [
+        'keytool', '-exportcert', '-alias', 'kafka-ca',  # замените на ваш alias
+        '-keystore', truststore_path,
+        '-storepass', password,
+        '-file', output_crt,
+        '-rfc'  # для PEM формата
+    ]
+    subprocess.run(cmd, check=True)
+
+# Конвертируем truststore (если нужно)
+# convert_truststore_to_crt('/path/to/kafka.truststore', 'password', '/tmp/ca.crt')
+
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = True
+ssl_context.verify_mode = ssl.CERT_REQUIRED
+
+# Используем конвертированный или оригинальный .crt файл
+ssl_context.load_verify_locations('/path/to/trust-ca.crt')  # или '/tmp/ca.crt'
+
+producer = AIOKafkaProducer(
+    bootstrap_servers=['kafka:9093'],
+    security_protocol='SASL_SSL',
+    sasl_mechanism='SCRAM-SHA-256',
+    sasl_username='username',
+    sasl_password='password',
+    ssl_context=ssl_context
+)
+```
+
+## Структура ваших файлов:
+
+```
+/path/to/certificates/
+├── trust-ca.crt          # CA сертификат для проверки сервера
+├── client-cert.crt       # Клиентский сертификат (если нужен mTLS)
+├── client-cert.key       # Ключ клиентского сертификата
+├── kafka.truststore      # Java truststore
+└── kafka.keystore        # Java keystore
+```
+
+## Рекомендация:
+
+**Используйте Вариант 2 или 3** - они самые простые и надежные. Если у вас только SASL аутентификация (не mTLS), то клиентские сертификаты не нужны, используйте только `ssl_cafile` с путем к `trust-ca.crt`.
+
+Замените пути в примерах:
+- `/path/to/trust-ca.crt` → путь к вашему CA сертификату
+- `/path/to/client-cert.crt` → путь к клиентскому сертификату (если нужен)
+- `/path/to/client-cert.key` → путь к ключу клиентского сертификата (если нужен)
