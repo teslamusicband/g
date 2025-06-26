@@ -1,0 +1,307 @@
+#!/bin/bash
+
+# Основной скрипт для проверки административных прав на удаленных серверах
+# Запускается от пользователя user1
+
+# Настройки
+USERNAME="user1"
+SERVERS="10.0.0.2 10.0.0.3 10.0.0.4 10.0.0.5 10.0.0.6 10.0.0.7 10.0.0.8 10.0.0.9 10.0.0.10"
+OUTPUT_FILE="admin_audit_results.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REMOTE_SCRIPT="/tmp/admin_check.sh"
+
+# Цвета для вывода
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Функция логирования
+log() {
+    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+# Создаем скрипт для удаленного выполнения
+create_remote_script() {
+    cat > "${SCRIPT_DIR}/admin_check.sh" << 'EOF'
+#!/bin/bash
+
+# Скрипт для проверки административных прав (удаленное выполнение)
+echo "=== ПОЛНАЯ ПРОВЕРКА АДМИНИСТРАТИВНЫХ ПРАВ ==="
+echo "Hostname: $(hostname)"
+echo "Date: $(date)"
+echo "User: $(whoami)"
+echo
+
+# 1. Пользователи с UID 0
+echo "1. Пользователи с root UID (0):"
+awk -F: '$3 == 0 {print "  " $1}' /etc/passwd
+echo
+
+# 2. Системные пользователи (UID < 1000)
+echo "2. Системные пользователи (UID < 1000):"
+awk -F: '$3 < 1000 && $3 >= 1 {print "  " $1 " (UID: " $3 ", Shell: " $7 ")"}' /etc/passwd
+echo
+
+# 3. Пользователи с sudo правами
+echo "3. Пользователи с sudo правами:"
+for user in $(cut -d: -f1 /etc/passwd); do
+    if sudo -l -U "$user" 2>/dev/null | grep -q "may run"; then
+        echo "  $user"
+    fi
+done
+echo
+
+# 4. Административные группы
+echo "4. Административные группы:"
+for group in wheel sudo admin root adm; do
+    if getent group "$group" >/dev/null 2>&1; then
+        members=$(getent group "$group" | cut -d: -f4)
+        if [ -n "$members" ]; then
+            echo "  $group: $members"
+        else
+            echo "  $group: (empty)"
+        fi
+    fi
+done
+echo
+
+# 5. Потенциально опасные группы
+echo "5. Пользователи в потенциально опасных группах:"
+dangerous_groups="docker lxd libvirt kvm disk cdrom floppy audio video plugdev netdev lpadmin sambashare"
+for group in $dangerous_groups; do
+    if getent group "$group" >/dev/null 2>&1; then
+        members=$(getent group "$group" | cut -d: -f4)
+        if [ -n "$members" ]; then
+            echo "  $group: $members"
+        fi
+    fi
+done
+echo
+
+# 6. Активные сессии
+echo "6. Текущие активные сессии:"
+who 2>/dev/null || echo "  Нет активных сессий"
+echo
+
+# 7. Последние входы административных пользователей
+echo "7. Последние входы root:"
+lastlog 2>/dev/null | head -1
+lastlog 2>/dev/null | grep "root" | head -5
+echo
+
+# 8. SUID файлы (топ-10 необычных)
+echo "8. Необычные SUID файлы:"
+find / -type f -perm -4000 2>/dev/null | grep -v -E "(su|sudo|passwd|mount|umount|ping|pkexec)" | head -10
+echo
+
+# 9. SSH ключи root
+echo "9. SSH ключи root:"
+if [ -d "/root/.ssh" ]; then
+    ls -la /root/.ssh/ 2>/dev/null || echo "  Нет доступа к /root/.ssh/"
+else
+    echo "  Директория /root/.ssh не существует"
+fi
+echo
+
+# 10. Capabilities
+echo "10. Файлы с capabilities:"
+if command -v getcap >/dev/null 2>&1; then
+    getcap -r / 2>/dev/null | head -10
+else
+    echo "  getcap не установлен"
+fi
+echo
+
+echo "=== КОНЕЦ ПРОВЕРКИ ==="
+EOF
+
+    chmod +x "${SCRIPT_DIR}/admin_check.sh"
+}
+
+# Функция проверки SSH соединения
+check_ssh_connection() {
+    local server=$1
+    ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no ${USERNAME}@${server} exit 2>/dev/null
+    return $?
+}
+
+# Функция выполнения проверки на удаленном сервере
+audit_server() {
+    local server=$1
+    local hostname=""
+    
+    log "Подключение к серверу $server..."
+    
+    # Проверяем SSH соединение
+    if ! check_ssh_connection $server; then
+        error "Не удалось подключиться к $server"
+        echo "======================================" >> "$OUTPUT_FILE"
+        echo "SERVER: $server" >> "$OUTPUT_FILE"
+        echo "STATUS: CONNECTION FAILED" >> "$OUTPUT_FILE"
+        echo "DATE: $(date)" >> "$OUTPUT_FILE"
+        echo "======================================" >> "$OUTPUT_FILE"
+        echo >> "$OUTPUT_FILE"
+        return 1
+    fi
+    
+    # Копируем скрипт на удаленный сервер
+    log "Копирование скрипта на $server..."
+    if ! scp -o StrictHostKeyChecking=no "${SCRIPT_DIR}/admin_check.sh" ${USERNAME}@${server}:${REMOTE_SCRIPT} 2>/dev/null; then
+        error "Не удалось скопировать скрипт на $server"
+        return 1
+    fi
+    
+    # Получаем hostname удаленного сервера
+    hostname=$(ssh -o StrictHostKeyChecking=no ${USERNAME}@${server} "hostname" 2>/dev/null)
+    if [ -z "$hostname" ]; then
+        hostname="$server"
+    fi
+    
+    log "Выполнение проверки на $server (hostname: $hostname)..."
+    
+    # Выполняем скрипт и сохраняем результат
+    echo "======================================" >> "$OUTPUT_FILE"
+    echo "SERVER: $server" >> "$OUTPUT_FILE"
+    echo "HOSTNAME: $hostname" >> "$OUTPUT_FILE"
+    echo "DATE: $(date)" >> "$OUTPUT_FILE"
+    echo "======================================" >> "$OUTPUT_FILE"
+    
+    # Выполняем удаленный скрипт
+    if ssh -o StrictHostKeyChecking=no ${USERNAME}@${server} "chmod +x ${REMOTE_SCRIPT} && ${REMOTE_SCRIPT}" >> "$OUTPUT_FILE" 2>&1; then
+        log "Проверка $server завершена успешно"
+    else
+        error "Ошибка при выполнении проверки на $server"
+        echo "ERROR: Script execution failed" >> "$OUTPUT_FILE"
+    fi
+    
+    echo >> "$OUTPUT_FILE"
+    
+    # Удаляем временный скрипт с удаленного сервера
+    ssh -o StrictHostKeyChecking=no ${USERNAME}@${server} "rm -f ${REMOTE_SCRIPT}" 2>/dev/null
+    
+    return 0
+}
+
+# Основная функция
+main() {
+    log "Запуск аудита административных прав на удаленных серверах"
+    log "Пользователь: $USERNAME"
+    log "Серверы: $SERVERS"
+    log "Результаты будут сохранены в: $OUTPUT_FILE"
+    
+    # Создаем скрипт для удаленного выполнения
+    create_remote_script
+    
+    # Инициализируем файл результатов
+    cat > "$OUTPUT_FILE" << EOF
+==============================================
+АУДИТ АДМИНИСТРАТИВНЫХ ПРАВ НА УДАЛЕННЫХ СЕРВЕРАХ
+==============================================
+Дата начала: $(date)
+Пользователь: $USERNAME
+Исполняемая машина: $(hostname)
+==============================================
+
+EOF
+    
+    # Счетчики
+    local total_servers=0
+    local successful_audits=0
+    local failed_audits=0
+    
+    # Проверяем каждый сервер
+    for server in $SERVERS; do
+        total_servers=$((total_servers + 1))
+        
+        if audit_server "$server"; then
+            successful_audits=$((successful_audits + 1))
+        else
+            failed_audits=$((failed_audits + 1))
+        fi
+        
+        # Пауза между серверами
+        sleep 1
+    done
+    
+    # Записываем итоговую статистику
+    cat >> "$OUTPUT_FILE" << EOF
+==============================================
+ИТОГОВАЯ СТАТИСТИКА
+==============================================
+Всего серверов: $total_servers
+Успешно проверено: $successful_audits
+Ошибок: $failed_audits
+Дата завершения: $(date)
+==============================================
+EOF
+    
+    log "Аудит завершен!"
+    log "Всего серверов: $total_servers"
+    log "Успешно проверено: $successful_audits"
+    log "Ошибок: $failed_audits"
+    log "Результаты сохранены в: $OUTPUT_FILE"
+    
+    # Показываем краткую статистику
+    echo
+    echo "=== КРАТКАЯ СТАТИСТИКА ==="
+    echo "Файл результатов: $OUTPUT_FILE"
+    echo "Размер файла: $(du -h "$OUTPUT_FILE" | cut -f1)"
+    echo "Количество строк: $(wc -l < "$OUTPUT_FILE")"
+}
+
+# Проверка зависимостей
+check_dependencies() {
+    local deps="ssh scp"
+    for dep in $deps; do
+        if ! command -v $dep >/dev/null 2>&1; then
+            error "Не найдена команда: $dep"
+            exit 1
+        fi
+    done
+}
+
+# Проверка SSH ключей
+check_ssh_keys() {
+    if [ ! -f ~/.ssh/id_rsa ] && [ ! -f ~/.ssh/id_ed25519 ] && [ ! -f ~/.ssh/id_ecdsa ]; then
+        warning "SSH ключи не найдены. Возможно потребуется ввод пароля для каждого сервера."
+        echo "Для автоматической работы настройте SSH ключи:"
+        echo "  ssh-keygen -t ed25519"
+        echo "  ssh-copy-id user1@server"
+        echo
+        read -p "Продолжить? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
+}
+
+# Запуск скрипта
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Проверяем что скрипт запущен от нужного пользователя
+    if [ "$(whoami)" != "$USERNAME" ]; then
+        error "Скрипт должен быть запущен от пользователя $USERNAME"
+        exit 1
+    fi
+    
+    check_dependencies
+    check_ssh_keys
+    main
+    
+    # Предложение просмотра результатов
+    echo
+    read -p "Показать результаты? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        less "$OUTPUT_FILE"
+    fi
+fi
