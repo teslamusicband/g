@@ -1,0 +1,183 @@
+## Проверка учетных записей с правами администратора
+
+Вот комплексный подход для проверки всех УЗ с административными правилами:
+
+## 1. Проверка по UID (суперпользователи)
+
+```bash
+# Найти всех пользователей с UID 0 (root права)
+awk -F: '$3 == 0 {print $1 " (UID: " $3 ")"}' /etc/passwd
+
+# Проверить пользователей с низкими UID (системные, потенциально привилегированные)
+awk -F: '$3 < 100 {print $1 " (UID: " $3 ", Shell: " $7 ")"}' /etc/passwd | sort -k2 -n
+```
+
+## 2. Проверка sudo прав
+
+```bash
+# Проверить всех пользователей в sudoers
+sudo grep -v '^#\|^$' /etc/sudoers
+sudo grep -v '^#\|^$' /etc/sudoers.d/* 2>/dev/null
+
+# Проверить конкретного пользователя
+sudo -l -U username
+
+# Проверить всех пользователей системы на sudo права
+for user in $(cut -d: -f1 /etc/passwd); do
+    sudo -l -U "$user" 2>/dev/null | grep -q "may run" && echo "User $user has sudo rights"
+done
+```
+
+## 3. Проверка групп с административными правами
+
+```bash
+# Основные административные группы
+admin_groups="wheel sudo admin root adm"
+
+for group in $admin_groups; do
+    if getent group "$group" >/dev/null 2>&1; then
+        echo "=== Группа $group ==="
+        getent group "$group"
+        echo
+    fi
+done
+
+# Проверить все группы конкретного пользователя
+groups username
+id username
+```
+
+## 4. Проверка дополнительных привилегированных групп
+
+```bash
+# Группы с потенциально опасными правами
+dangerous_groups="docker lxd libvirt kvm disk cdrom floppy audio video plugdev netdev lpadmin sambashare"
+
+echo "=== Пользователи в потенциально опасных группах ==="
+for group in $dangerous_groups; do
+    if getent group "$group" >/dev/null 2>&1; then
+        members=$(getent group "$group" | cut -d: -f4)
+        if [ -n "$members" ]; then
+            echo "$group: $members"
+        fi
+    fi
+done
+```
+
+## 5. Проверка SUID/SGID файлов
+
+```bash
+# Найти SUID файлы (выполняются с правами владельца)
+find / -type f -perm -4000 -ls 2>/dev/null
+
+# Найти SGID файлы (выполняются с правами группы)
+find / -type f -perm -2000 -ls 2>/dev/null
+
+# Проверить необычные SUID/SGID файлы
+find / -type f \( -perm -4000 -o -perm -2000 \) -exec ls -la {} \; 2>/dev/null | grep -v -E "(su|sudo|passwd|mount|umount|ping)"
+```
+
+## 6. Проверка capabilities
+
+```bash
+# Проверить файлы с расширенными возможностями
+getcap -r / 2>/dev/null
+
+# Проверить capabilities процессов
+ps -eo pid,comm,cap_permitted,cap_effective,cap_inheritable | grep -v "0000000000000000"
+```
+
+## 7. Полная проверка всех пользователей
+
+```bash
+#!/bin/bash
+echo "=== ПОЛНАЯ ПРОВЕРКА АДМИНИСТРАТИВНЫХ ПРАВ ==="
+echo
+
+# 1. Пользователи с UID 0
+echo "1. Пользователи с root UID (0):"
+awk -F: '$3 == 0 {print "  " $1}' /etc/passwd
+echo
+
+# 2. Системные пользователи (UID < 1000)
+echo "2. Системные пользователи (UID < 1000):"
+awk -F: '$3 < 1000 && $3 >= 1 {print "  " $1 " (UID: " $3 ", Shell: " $7 ")"}' /etc/passwd
+echo
+
+# 3. Пользователи с sudo правами
+echo "3. Пользователи с sudo правами:"
+for user in $(cut -d: -f1 /etc/passwd); do
+    if sudo -l -U "$user" 2>/dev/null | grep -q "may run"; then
+        echo "  $user"
+    fi
+done
+echo
+
+# 4. Административные группы
+echo "4. Административные группы:"
+for group in wheel sudo admin root adm; do
+    if getent group "$group" >/dev/null 2>&1; then
+        members=$(getent group "$group" | cut -d: -f4)
+        if [ -n "$members" ]; then
+            echo "  $group: $members"
+        fi
+    fi
+done
+echo
+
+# 5. Активные сессии
+echo "5. Текущие активные сессии:"
+who
+echo
+
+# 6. Последние входы административных пользователей
+echo "6. Последние входы root и sudo пользователей:"
+lastlog | head -1
+lastlog | grep -E "(root|sudo)" | head -10
+```
+
+## 8. Проверка SSH ключей
+
+```bash
+# Проверить SSH ключи для root
+ls -la /root/.ssh/ 2>/dev/null
+
+# Проверить authorized_keys для всех пользователей
+find /home -name "authorized_keys" -exec echo "=== {} ===" \; -exec cat {} \; 2>/dev/null
+```
+
+## 9. Проверка systemd и cron
+
+```bash
+# Проверить systemd сервисы с User=root
+systemctl list-units --type=service --state=active | grep -E "(root|sudo)"
+
+# Проверить cron задачи root
+sudo crontab -l 2>/dev/null
+
+# Проверить системные cron файлы
+ls -la /etc/cron.d/ /etc/cron.hourly/ /etc/cron.daily/
+```
+
+## 10. Быстрая команда для общей проверки
+
+```bash
+# Одна команда для быстрой проверки
+(echo "=== UID 0 users ==="; awk -F: '$3==0{print $1}' /etc/passwd; echo; echo "=== Wheel group ==="; getent group wheel 2>/dev/null; echo "=== Sudo group ==="; getent group sudo 2>/dev/null; echo "=== Admin group ==="; getent group admin 2>/dev/null) 2>/dev/null
+```
+
+## Дополнительные проверки для специфичных систем
+
+```bash
+# Для систем с SELinux
+sestatus 2>/dev/null
+getsebool -a | grep admin 2>/dev/null
+
+# Для Ubuntu/Debian
+grep -r "admin\|sudo" /etc/group
+
+# Для CentOS/RHEL/OEL
+grep wheel /etc/group
+```
+
+Эти команды помогут вам выявить все учетные записи с административными правами в системе. Обратите особое внимание на неожиданные записи в административных группах и пользователей с низкими UID.
