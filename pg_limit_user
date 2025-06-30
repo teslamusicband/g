@@ -1,0 +1,110 @@
+Вот пошаговая инструкция для создания пользователя с ограниченными правами в кластере Patroni:
+
+## Шаг 1: Подключение к кластеру Patroni
+
+Определите текущий лидер кластера:
+```bash
+patronictl -c /etc/patroni/patroni.yml list
+```
+
+Подключитесь к лидеру как пользователь postgres:
+```bash
+psql -h <leader_ip> -U postgres -d <database_name>
+```
+
+## Шаг 2: Создание пользователя
+
+```sql
+-- Создаем пользователя
+CREATE USER limited_user WITH PASSWORD 'secure_password_here';
+
+-- Убираем все права по умолчанию
+REVOKE ALL ON DATABASE <database_name> FROM limited_user;
+REVOKE ALL ON SCHEMA public FROM limited_user;
+```
+
+## Шаг 3: Настройка прав на схему Schema123
+
+```sql
+-- Даем право подключения к базе данных
+GRANT CONNECT ON DATABASE <database_name> TO limited_user;
+
+-- Даем право использования схемы Schema123
+GRANT USAGE ON SCHEMA "Schema123" TO limited_user;
+
+-- Даем права на чтение и изменение данных во всех таблицах схемы
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "Schema123" TO limited_user;
+
+-- Даем права на использование последовательностей (для AUTO_INCREMENT полей)
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA "Schema123" TO limited_user;
+
+-- Устанавливаем права по умолчанию для будущих таблиц
+ALTER DEFAULT PRIVILEGES IN SCHEMA "Schema123" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO limited_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA "Schema123" GRANT USAGE, SELECT ON SEQUENCES TO limited_user;
+```
+
+## Шаг 4: Ограничение доступа к другим схемам
+
+```sql
+-- Убираем доступ к схеме public (если он был)
+REVOKE ALL ON SCHEMA public FROM limited_user;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM limited_user;
+
+-- Убираем доступ к системным схемам
+REVOKE ALL ON SCHEMA information_schema FROM limited_user;
+REVOKE ALL ON SCHEMA pg_catalog FROM limited_user;
+```
+
+## Шаг 5: Установка search_path
+
+```sql
+-- Ограничиваем search_path только нужной схемой
+ALTER USER limited_user SET search_path = "Schema123";
+```
+
+## Шаг 6: Проверка настроек
+
+Проверьте права пользователя:
+```sql
+-- Проверяем права на схему
+SELECT schemaname, has_schema_privilege('limited_user', schemaname, 'USAGE') as usage_privilege
+FROM pg_tables 
+WHERE schemaname IN ('Schema123', 'public', 'information_schema');
+
+-- Проверяем права на таблицы в схеме Schema123
+\dp "Schema123".*
+
+-- Проверяем search_path пользователя
+SELECT rolname, rolconfig FROM pg_roles WHERE rolname = 'limited_user';
+```
+
+## Шаг 7: Тестирование
+
+Подключитесь под новым пользователем и проверьте доступ:
+```bash
+psql -h <leader_ip> -U limited_user -d <database_name>
+```
+
+Выполните тесты:
+```sql
+-- Должно работать (если таблица существует в Schema123)
+SELECT * FROM some_table LIMIT 1;
+
+-- Должно работать
+INSERT INTO some_table (column1) VALUES ('test');
+
+-- Не должно работать (нет прав на DDL)
+CREATE TABLE test_table (id int);
+
+-- Не должно работать (нет доступа к другим схемам)
+SELECT * FROM public.some_public_table;
+```
+
+## Дополнительные рекомендации безопасности
+
+1. **Используйте сложный пароль** и рассмотрите возможность аутентификации через сертификаты
+2. **Настройте pg_hba.conf** для ограничения подключений по IP
+3. **Регулярно ротируйте пароли**
+4. **Мониторьте активность пользователя** через pg_stat_activity
+
+Этот подход обеспечивает минимальные необходимые права согласно принципу наименьших привилегий, что соответствует требованиям информационной безопасности.
