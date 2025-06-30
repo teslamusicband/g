@@ -1,0 +1,144 @@
+Вот набор SQL-запросов для полной проверки прав существующего пользователя:
+
+## Шаг 1: Основная информация о пользователе
+
+```sql
+-- Общая информация о пользователе
+SELECT 
+    rolname,
+    rolsuper,
+    rolinherit,
+    rolcreaterole,
+    rolcreatedb,
+    rolcanlogin,
+    rolreplication,
+    rolconnlimit,
+    rolconfig
+FROM pg_roles 
+WHERE rolname = 'your_username_here';
+```
+
+## Шаг 2: Права на базу данных
+
+```sql
+-- Права на подключение к базам данных
+SELECT 
+    datname,
+    has_database_privilege('your_username_here', datname, 'CONNECT') as can_connect,
+    has_database_privilege('your_username_here', datname, 'CREATE') as can_create,
+    has_database_privilege('your_username_here', datname, 'TEMPORARY') as can_temp
+FROM pg_database 
+WHERE datname NOT IN ('template0', 'template1');
+```
+
+## Шаг 3: Права на схемы
+
+```sql
+-- Права на все схемы в текущей базе
+SELECT 
+    schemaname,
+    has_schema_privilege('your_username_here', schemaname, 'USAGE') as usage_privilege,
+    has_schema_privilege('your_username_here', schemaname, 'CREATE') as create_privilege
+FROM information_schema.schemata
+ORDER BY schemaname;
+```
+
+## Шаг 4: Права на таблицы по схемам
+
+```sql
+-- Детальные права на таблицы в конкретной схеме (замените Schema123 на нужную)
+SELECT 
+    schemaname,
+    tablename,
+    has_table_privilege('your_username_here', schemaname||'.'||tablename, 'SELECT') as can_select,
+    has_table_privilege('your_username_here', schemaname||'.'||tablename, 'INSERT') as can_insert,
+    has_table_privilege('your_username_here', schemaname||'.'||tablename, 'UPDATE') as can_update,
+    has_table_privilege('your_username_here', schemaname||'.'||tablename, 'DELETE') as can_delete,
+    has_table_privilege('your_username_here', schemaname||'.'||tablename, 'TRUNCATE') as can_truncate,
+    has_table_privilege('your_username_here', schemaname||'.'||tablename, 'REFERENCES') as can_reference,
+    has_table_privilege('your_username_here', schemaname||'.'||tablename, 'TRIGGER') as can_trigger
+FROM information_schema.tables 
+WHERE schemaname = 'Schema123'
+ORDER BY tablename;
+```
+
+## Шаг 5: Права на последовательности
+
+```sql
+-- Права на последовательности в схеме
+SELECT 
+    schemaname,
+    sequencename,
+    has_sequence_privilege('your_username_here', schemaname||'.'||sequencename, 'USAGE') as can_usage,
+    has_sequence_privilege('your_username_here', schemaname||'.'||sequencename, 'SELECT') as can_select,
+    has_sequence_privilege('your_username_here', schemaname||'.'||sequencename, 'UPDATE') as can_update
+FROM information_schema.sequences 
+WHERE schemaname = 'Schema123';
+```
+
+## Шаг 6: Явные права из системных таблиц
+
+```sql
+-- Явно выданные права на таблицы
+SELECT 
+    t.schemaname,
+    t.tablename,
+    t.privilege_type,
+    t.is_grantable
+FROM information_schema.table_privileges t
+WHERE t.grantee = 'your_username_here'
+ORDER BY t.schemaname, t.tablename, t.privilege_type;
+```
+
+## Шаг 7: Права по умолчанию
+
+```sql
+-- Права по умолчанию для будущих объектов
+SELECT 
+    defaclnamespace::regnamespace as schema,
+    defaclobjtype,
+    defaclacl
+FROM pg_default_acl d
+JOIN pg_roles r ON d.defaclrole = r.oid
+WHERE array_to_string(defaclacl, ',') LIKE '%your_username_here%';
+```
+
+## Шаг 8: Членство в ролях
+
+```sql
+-- Проверяем, является ли пользователь членом других ролей
+SELECT 
+    r.rolname as role_name,
+    m.rolname as member_of
+FROM pg_roles r
+JOIN pg_auth_members am ON r.oid = am.member
+JOIN pg_roles m ON am.roleid = m.oid
+WHERE r.rolname = 'your_username_here';
+```
+
+## Шаг 9: Общий обзор доступных объектов
+
+```sql
+-- Быстрая проверка - какие таблицы пользователь может читать
+SELECT 
+    schemaname,
+    tablename
+FROM information_schema.tables 
+WHERE has_table_privilege('your_username_here', schemaname||'.'||tablename, 'SELECT')
+AND schemaname NOT IN ('information_schema', 'pg_catalog')
+ORDER BY schemaname, tablename;
+```
+
+## Практическое использование:
+
+1. **Замените `'your_username_here'`** на имя вашего пользователя во всех запросах
+2. **Замените `'Schema123'`** на название вашей схемы
+3. **Выполните запросы поочередно** для получения полной картины
+
+## Интерпретация результатов:
+
+- `t` (true) = право есть
+- `f` (false) = права нет
+- `NULL` = объект не существует или нет базовых прав
+
+После анализа результатов вы сможете понять, какие права нужно добавить или убрать, сравнив с требованиями из первой инструкции.
