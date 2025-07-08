@@ -1,0 +1,235 @@
+# Пошаговая инструкция по смене паролей в Patroni (Production)
+
+## ⚠️ Важные предупреждения
+
+1. **Обязательно сделайте резервную копию** всех данных перед началом
+2. **Проведите операцию в окно технического обслуживания**
+3. **Подготовьте план отката** на случай проблем
+4. **Убедитесь, что все узлы кластера доступны**
+
+## Подготовительный этап
+
+### 1. Проверка состояния кластера
+```bash
+# Проверить статус кластера
+patronictl -c /etc/patroni/patroni.yml list
+
+# Убедиться, что все узлы здоровы
+patronictl -c /etc/patroni/patroni.yml show-config
+```
+
+### 2. Создание резервной копии
+```bash
+# Создать резервную копию конфигурации
+cp /etc/patroni/patroni.yml /etc/patroni/patroni.yml.backup.$(date +%Y%m%d_%H%M%S)
+
+# Создать резервную копию базы данных
+pg_dumpall -h 127.0.0.1 -p 5432 -U postgres > /backup/full_backup_$(date +%Y%m%d_%H%M%S).sql
+```
+
+### 3. Подготовка новых паролей
+```bash
+# Генерация новых паролей (рекомендуется использовать менеджер паролей)
+NEW_POSTGRES_PASSWORD="новый_пароль_postgres"
+NEW_REPLICATOR_PASSWORD="новый_пароль_replicator"
+NEW_REWIND_PASSWORD="новый_пароль_rewind"
+NEW_RESTAPI_PASSWORD="новый_пароль_restapi"
+```
+
+## Основная процедура смены паролей
+
+### Шаг 1: Изменение пароля superuser (postgres)
+
+**На мастер-узле:**
+```bash
+# Подключиться к PostgreSQL
+psql -h 127.0.0.1 -p 5432 -U postgres
+
+# Изменить пароль
+ALTER USER postgres PASSWORD 'новый_пароль_postgres';
+\q
+```
+
+**На всех узлах кластера:**
+```bash
+# Обновить файл конфигурации
+sed -i 's/password: patroni/password: новый_пароль_postgres/' /etc/patroni/patroni.yml
+
+# Обновить .pgpass файл
+echo "127.0.0.1:5432:*:postgres:новый_пароль_postgres" > /tmp/pgpass0
+chmod 600 /tmp/pgpass0
+```
+
+### Шаг 2: Изменение пароля replication user
+
+**На мастер-узле:**
+```bash
+psql -h 127.0.0.1 -p 5432 -U postgres
+ALTER USER replicator PASSWORD 'новый_пароль_replicator';
+\q
+```
+
+**На всех узлах кластера:**
+```bash
+# Обновить конфигурацию
+sed -i 's/password: rep-pass/password: новый_пароль_replicator/' /etc/patroni/patroni.yml
+
+# Обновить .pgpass
+echo "127.0.0.1:5432:*:replicator:новый_пароль_replicator" >> /tmp/pgpass0
+```
+
+### Шаг 3: Изменение пароля rewind user
+
+**На мастер-узле:**
+```bash
+psql -h 127.0.0.1 -p 5432 -U postgres
+ALTER USER rewind_user PASSWORD 'новый_пароль_rewind';
+\q
+```
+
+**На всех узлах кластера:**
+```bash
+# Обновить конфигурацию
+sed -i 's/password: rewind_password/password: новый_пароль_rewind/' /etc/patroni/patroni.yml
+
+# Обновить .pgpass
+echo "127.0.0.1:5432:*:rewind_user:новый_пароль_rewind" >> /tmp/pgpass0
+```
+
+### Шаг 4: Изменение пароля REST API (если используется)
+
+**На всех узлах кластера:**
+```bash
+# Обновить конфигурацию REST API
+# Раскомментировать и изменить секцию authentication в restapi
+vim /etc/patroni/patroni.yml
+
+# Добавить/изменить:
+restapi:
+  listen: 127.0.0.1:8008
+  connect_address: 127.0.0.1:8008
+  authentication:
+    username: ptrrest
+    password: новый_пароль_restapi
+```
+
+## Поэтапный рестарт узлов
+
+### Шаг 5: Перезапуск узлов кластера
+
+**⚠️ ВАЖНО: Перезапускайте узлы по одному, начиная с реплик!**
+
+**На каждой реплике (по очереди):**
+```bash
+# Остановить Patroni
+systemctl stop patroni
+
+# Проверить, что узел остановлен
+patronictl -c /etc/patroni/patroni.yml list
+
+# Запустить Patroni
+systemctl start patroni
+
+# Проверить статус
+systemctl status patroni
+patronictl -c /etc/patroni/patroni.yml list
+
+# Дождаться полного восстановления репликации
+```
+
+**На мастер-узле (в последнюю очередь):**
+```bash
+# Выполнить switchover на здоровую реплику
+patronictl -c /etc/patroni/patroni.yml switchover
+
+# После успешного switchover перезапустить бывший мастер
+systemctl restart patroni
+
+# Проверить статус кластера
+patronictl -c /etc/patroni/patroni.yml list
+```
+
+## Проверка и тестирование
+
+### Шаг 6: Проверка работоспособности
+
+```bash
+# Проверить статус всех узлов
+patronictl -c /etc/patroni/patroni.yml list
+
+# Проверить подключение к PostgreSQL
+psql -h 127.0.0.1 -p 5432 -U postgres -c "SELECT version();"
+
+# Проверить репликацию
+psql -h 127.0.0.1 -p 5432 -U postgres -c "SELECT * FROM pg_stat_replication;"
+
+# Проверить REST API (если используется)
+curl -u ptrrest:новый_пароль_restapi http://127.0.0.1:8008/
+```
+
+### Шаг 7: Тестирование отказоустойчивости
+
+```bash
+# Выполнить тестовый switchover
+patronictl -c /etc/patroni/patroni.yml switchover
+
+# Проверить, что все работает корректно
+patronictl -c /etc/patroni/patroni.yml list
+```
+
+## План отката
+
+В случае проблем:
+
+1. **Остановить все узлы Patroni**
+2. **Восстановить оригинальный конфигурационный файл**
+3. **Восстановить исходные пароли в PostgreSQL**
+4. **Запустить узлы в правильном порядке**
+
+```bash
+# Восстановление конфигурации
+cp /etc/patroni/patroni.yml.backup.* /etc/patroni/patroni.yml
+
+# Восстановление паролей в PostgreSQL
+psql -h 127.0.0.1 -p 5432 -U postgres
+ALTER USER postgres PASSWORD 'patroni';
+ALTER USER replicator PASSWORD 'rep-pass';
+ALTER USER rewind_user PASSWORD 'rewind_password';
+```
+
+## Дополнительные рекомендации
+
+1. **Обновите документацию** с новыми паролями
+2. **Сохраните пароли в безопасном месте** (менеджер паролей)
+3. **Настройте мониторинг** для отслеживания состояния кластера
+4. **Планируйте регулярную смену паролей** (раз в 3-6 месяцев)
+5. **Используйте SSL/TLS** для дополнительной безопасности
+
+## Важные моменты
+
+- Всегда меняйте пароли в базе данных ПЕРЕД изменением конфигурации
+- Перезапускайте узлы по одному, начиная с реплик
+- Проверяйте статус кластера после каждого изменения
+- Держите план отката готовым к исполнению
+
+
+
+
+
+
+
+
+Как Senior DevOps, я предоставлю вам пошаговую инструкцию для безопасного изменения паролей учетных записей Patroni в продакшене.**Критически важные моменты для продакшена:**
+
+1. **Последовательность действий**: Сначала меняйте пароли в PostgreSQL, затем в конфигурации Patroni
+2. **Никогда не меняйте пароли одновременно на всех узлах** - это может привести к полному отказу кластера
+3. **Обязательно начинайте с реплик**, мастер перезапускаете последним
+4. **Используйте switchover** вместо простого рестарта мастера для минимизации downtime
+
+**Дополнительные соображения безопасности:**
+- Рассмотрите использование переменных окружения для паролей
+- Настройте SSL/TLS соединения между узлами
+- Регулярно ротируйте пароли согласно политике безопасности
+- Используйте надежные пароли (минимум 16 символов, смешанные символы)
+
+Готов ответить на любые вопросы по этой процедуре!
