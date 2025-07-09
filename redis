@@ -1,0 +1,186 @@
+Для интеграции ArgoCD с Vault для получения паролей Redis есть несколько подходов. Рассмотрю наиболее популярные:
+
+## 1. Использование ArgoCD Vault Plugin
+
+**Установка плагина:**
+```bash
+# В ArgoCD repo server
+argocd-vault-plugin generate ./manifests
+```
+
+**В Git-репозитории создайте шаблон ConfigMap:**
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+data:
+  redis-config: |
+    masterauth <vault:secret/redis#password>
+    requirepass <vault:secret/redis#password>
+```
+
+**Настройка ArgoCD Application:**
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: redis-app
+spec:
+  source:
+    plugin:
+      name: argocd-vault-plugin
+      env:
+        - name: VAULT_ADDR
+          value: "https://your-vault-address"
+        - name: VAULT_TOKEN
+          value: "your-vault-token"
+```
+
+## 2. External Secrets Operator (рекомендуемый)
+
+**Установка External Secrets Operator:**
+```bash
+helm repo add external-secrets https://charts.external-secrets.io
+helm install external-secrets external-secrets/external-secrets -n external-secrets-system --create-namespace
+```
+
+**Создание SecretStore:**
+```yaml
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: vault-backend
+spec:
+  provider:
+    vault:
+      server: "https://your-vault-address"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "external-secrets"
+```
+
+**Создание ExternalSecret:**
+```yaml
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: redis-password
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: SecretStore
+  target:
+    name: redis-password
+    creationPolicy: Owner
+  data:
+  - secretKey: password
+    remoteRef:
+      key: redis
+      property: password
+```
+
+**Обновление ConfigMap для использования Secret:**
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+data:
+  redis-config: |
+    masterauth $(REDIS_PASSWORD)
+    requirepass $(REDIS_PASSWORD)
+```
+
+**Обновление StatefulSet для использования пароля из Secret:**
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  template:
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-password
+              key: password
+        command:
+        - redis-server
+        - /etc/redis/redis.conf
+        volumeMounts:
+        - name: config
+          mountPath: /etc/redis
+        - name: password-file
+          mountPath: /etc/redis-password
+      volumes:
+      - name: config
+        configMap:
+          name: redis-config
+      - name: password-file
+        secret:
+          secretName: redis-password
+```
+
+## 3. Использование Helm с Vault
+
+**values.yaml с Vault интеграцией:**
+```yaml
+redis:
+  auth:
+    existingSecret: redis-password
+    existingSecretPasswordKey: password
+
+vault:
+  enabled: true
+  secretName: "redis-password"
+  secretPath: "secret/redis"
+```
+
+## 4. Настройка Vault для Kubernetes
+
+**Включение Kubernetes auth в Vault:**
+```bash
+vault auth enable kubernetes
+vault write auth/kubernetes/config \
+  token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+  kubernetes_host="https://kubernetes.default.svc.cluster.local:443" \
+  kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+```
+
+**Создание политики:**
+```bash
+vault policy write redis-policy - <<EOF
+path "secret/data/redis" {
+  capabilities = ["read"]
+}
+EOF
+```
+
+**Создание роли:**
+```bash
+vault write auth/kubernetes/role/external-secrets \
+  bound_service_account_names=external-secrets \
+  bound_service_account_namespaces=default \
+  policies=redis-policy \
+  ttl=24h
+```
+
+## Рекомендация
+
+Для продакшена рекомендую **External Secrets Operator**, так как он:
+- Автоматически обновляет пароли при изменении в Vault
+- Поддерживает множество провайдеров секретов
+- Хорошо интегрируется с ArgoCD
+- Соответствует принципам GitOps
+
+Какой подход вам больше подходит? Могу детализировать настройку выбранного варианта.
