@@ -1,0 +1,10 @@
+# Создание ключа и сертификата одной командой
+openssl req -x509 -newkey rsa:2048 -keyout mysite123.company.com.key \
+    -out mysite123.company.com.crt -days 365 -nodes \
+    -subj "/C=RU/ST=Moscow/L=Moscow/O=Company/OU=IT/CN=mysite123.company.com"
+
+# Или поэтапно
+openssl genrsa -out mysite123.company.com.key 2048
+openssl req -new -x509 -key mysite123.company.com.key \
+    -out mysite123.company.com.crt -days 365 \
+    -subj "/C=RU/ST=Moscow/L=Moscow/O=Company/OU=IT/CN=mysite123.company.com"
