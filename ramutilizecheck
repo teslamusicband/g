@@ -1,0 +1,206 @@
+Для проверки и настройки полного использования доступной памяти на ваших серверах, нужно учесть специфику каждого компонента:
+
+## 1. Проверка текущего состояния памяти
+
+Сначала проверьте доступную память на каждом сервере:
+```bash
+# Общая память
+free -h
+# Детальная информация
+cat /proc/meminfo | grep -E "MemTotal|MemAvailable|Hugepages"
+# Проверка лимитов systemd
+systemctl show --property=MemoryMax [service-name]
+```
+
+## 2. HAProxy кластер
+
+HAProxy не требует много памяти, но проверьте:
+```bash
+# В конфигурации haproxy.cfg
+global
+    maxconn 100000
+    tune.bufsize 32768
+    tune.maxrewrite 8192
+```
+
+## 3. ClickHouse кластер
+
+Настройте в `/etc/clickhouse-server/config.xml`:
+```xml
+<max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+<max_memory_usage_ratio>0.9</max_memory_usage_ratio>
+<mark_cache_size>536870912000</mark_cache_size>
+<uncompressed_cache_size>268435456000</uncompressed_cache_size>
+```
+
+Проверка:
+```sql
+SELECT formatReadableSize(total_memory_tracker) FROM system.metrics WHERE metric = 'MemoryTracking';
+```
+
+## 4. VictoriaMetrics/ELK/Grafana кластер
+
+**VictoriaMetrics:**
+```bash
+# При запуске укажите
+-memory.allowedPercent=80
+-memory.allowedBytes=400GB
+```
+
+**Elasticsearch:**
+```yaml
+# В elasticsearch.yml
+bootstrap.memory_lock: true
+# В jvm.options
+-Xms400g
+-Xmx400g
+```
+
+**Grafana** - обычно не требует много памяти.
+
+## 5. Talos K8s кластер
+
+Проверьте конфигурацию узлов:
+```yaml
+# В machine config
+machine:
+  kubelet:
+    extraArgs:
+      system-reserved: memory=32Gi
+      kube-reserved: memory=16Gi
+      eviction-hard: memory.available<8Gi
+```
+
+Для подов Spark:
+```yaml
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: spark-executor
+    resources:
+      requests:
+        memory: "450Gi"
+      limits:
+        memory: "480Gi"
+```
+
+## 6. Kafka кластер
+
+Настройте в `server.properties`:
+```properties
+# JVM heap (рекомендуется не более 6GB)
+export KAFKA_HEAP_OPTS="-Xmx6g -Xms6g"
+# Остальная память для OS page cache
+```
+
+И системные настройки:
+```bash
+# Увеличьте page cache
+echo 'vm.dirty_ratio = 80' >> /etc/sysctl.conf
+echo 'vm.dirty_background_ratio = 5' >> /etc/sysctl.conf
+```
+
+## 7. Patroni с PostgreSQL 16
+
+В `postgresql.conf`:
+```conf
+shared_buffers = 128GB                    # ~25% RAM
+effective_cache_size = 384GB              # ~75% RAM
+work_mem = 512MB
+maintenance_work_mem = 2GB
+max_wal_size = 16GB
+checkpoint_completion_target = 0.9
+```
+
+В `patroni.yml`:
+```yaml
+postgresql:
+  parameters:
+    shared_buffers: 128GB
+    effective_cache_size: 384GB
+    max_connections: 1000
+```
+
+## 8. MinIO S3 кластер
+
+MinIO автоматически использует доступную память для кэширования, но можно настроить:
+```bash
+# Environment variables
+export MINIO_CACHE_DRIVES="/mnt/cache1,/mnt/cache2"
+export MINIO_CACHE_QUOTA=80
+```
+
+## 9. Spark в K8s (особое внимание)
+
+Для Spark-приложений в K8s создайте SparkApplication:
+```yaml
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: spark-app
+spec:
+  driver:
+    memory: "32g"
+    cores: 4
+  executor:
+    memory: "64g"
+    cores: 8
+    instances: 6
+  sparkConf:
+    "spark.executor.memoryOffHeap.enabled": "true"
+    "spark.executor.memoryOffHeap.size": "16g"
+    "spark.sql.adaptive.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.enabled": "true"
+```
+
+## 10. Общие системные настройки
+
+На всех серверах:
+```bash
+# Отключите swap
+swapoff -a
+# Закомментируйте swap в /etc/fstab
+
+# Настройте huge pages для PostgreSQL/ClickHouse
+echo 'vm.nr_hugepages = 262144' >> /etc/sysctl.conf  # для 512GB RAM
+echo 'vm.hugetlb_shm_group = postgres' >> /etc/sysctl.conf
+
+# Увеличьте лимиты
+echo '* soft memlock unlimited' >> /etc/security/limits.conf
+echo '* hard memlock unlimited' >> /etc/security/limits.conf
+```
+
+## 11. Мониторинг и проверка
+
+Создайте скрипт для мониторинга:
+```bash
+#!/bin/bash
+# memory_check.sh
+echo "=== Memory Usage Check ==="
+echo "Total RAM: $(free -h | grep Mem | awk '{print $2}')"
+echo "Used RAM: $(free -h | grep Mem | awk '{print $3}')"
+echo "Available RAM: $(free -h | grep Mem | awk '{print $7}')"
+echo "Cache: $(free -h | grep Mem | awk '{print $6}')"
+
+# Проверка по процессам
+echo "=== Top Memory Consumers ==="
+ps aux --sort=-%mem | head -20
+```
+
+## 12. Автоматизация через ArgoCD
+
+Создайте ConfigMap для настроек памяти:
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: memory-config
+data:
+  spark-defaults.conf: |
+    spark.executor.memory=64g
+    spark.driver.memory=32g
+    spark.executor.memoryFraction=0.8
+```
+
+Применяйте эти настройки пошагово, мониторя производительность после каждого изменения. Особое внимание уделите Spark-приложениям, так как они могут потреблять значительные объемы памяти.
