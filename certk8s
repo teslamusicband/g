@@ -1,0 +1,249 @@
+# Исправление ошибки SSL сертификата GitLab Runner
+
+## Проблема
+Ошибка "x509: certificate signed by unknown authority" означает, что GitLab Runner не может проверить SSL сертификат вашего GitLab сервера.
+
+## Решение 1: Добавление корневого сертификата CA
+
+### Шаг 1: Получение корневого сертификата
+
+```bash
+# Получите корневой сертификат вашего GitLab сервера
+openssl s_client -showcerts -connect mygitlab.company.com:443 </dev/null 2>/dev/null | openssl x509 -outform PEM > gitlab-ca.crt
+
+# Или если у вас есть корневой сертификат CA компании
+# Скопируйте его в файл gitlab-ca.crt
+```
+
+### Шаг 2: Создание Secret с корневым сертификатом
+
+```bash
+# Создайте Secret с корневым CA сертификатом
+kubectl create secret generic gitlab-ca-cert \
+  --from-file=gitlab-ca.crt=./gitlab-ca.crt \
+  --namespace gitlab-runner
+
+# Или если у вас уже есть Secret my.company.com.crt, обновите его
+kubectl create secret generic my.company.com.crt \
+  --from-file=my.company.com.crt=./gitlab-ca.crt \
+  --namespace gitlab-runner \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+### Шаг 3: Обновление конфигурации в values.yaml
+
+```yaml
+# values.yaml
+gitlabUrl: "https://mygitlab.company.com/"
+runnerToken: "glrt-your-authentication-token"
+
+# Указываем Secret с сертификатом
+certsSecretName: "my.company.com.crt"
+
+runners:
+  config: |
+    concurrent = 4
+    check_interval = 30
+    
+    [[runners]]
+      name = "kubernetes-runner"
+      url = "https://mygitlab.company.com/"
+      token = "glrt-your-authentication-token"
+      executor = "kubernetes"
+      
+      # Важно: указываем путь к сертификату
+      tls-ca-file = "/home/gitlab-runner/.gitlab-runner/certs/my.company.com.crt"
+      
+      [runners.kubernetes]
+        namespace = "gitlab-runner"
+        image = "ubuntu:20.04"
+        privileged = true
+        
+        cpu_limit = "1000m"
+        memory_limit = "2Gi"
+        cpu_request = "100m"
+        memory_request = "128Mi"
+        
+        pull_policy = ["if-not-present"]
+        
+        [[runners.kubernetes.volumes.empty_dir]]
+          name = "docker-certs"
+          mount_path = "/certs/client"
+          medium = "Memory"
+```
+
+## Решение 2: Отключение проверки SSL (НЕ рекомендуется для production)
+
+### Если нужно быстро протестировать:
+
+```yaml
+# values.yaml
+gitlabUrl: "https://mygitlab.company.com/"
+runnerToken: "glrt-your-authentication-token"
+
+runners:
+  config: |
+    concurrent = 4
+    check_interval = 30
+    
+    [[runners]]
+      name = "kubernetes-runner"
+      url = "https://mygitlab.company.com/"
+      token = "glrt-your-authentication-token"
+      executor = "kubernetes"
+      
+      # ВНИМАНИЕ: Отключает проверку SSL (небезопасно!)
+      tls-verify = false
+      
+      [runners.kubernetes]
+        namespace = "gitlab-runner"
+        image = "ubuntu:20.04"
+        privileged = true
+        # ... остальные настройки
+```
+
+## Решение 3: Использование системных CA сертификатов
+
+### Если ваш корпоративный CA уже добавлен в систему:
+
+```yaml
+# values.yaml
+runners:
+  config: |
+    [[runners]]
+      name = "kubernetes-runner"
+      url = "https://mygitlab.company.com/"
+      token = "glrt-your-authentication-token"
+      executor = "kubernetes"
+      
+      # Использовать системные CA сертификаты
+      tls-ca-file = "/etc/ssl/certs/ca-certificates.crt"
+      
+      [runners.kubernetes]
+        # ... настройки kubernetes
+```
+
+## Решение 4: Добавление множественных CA сертификатов
+
+### Если у вас несколько корпоративных CA:
+
+```bash
+# Создайте один файл с несколькими сертификатами
+cat root-ca.crt intermediate-ca.crt > combined-ca.crt
+
+# Создайте Secret
+kubectl create secret generic gitlab-ca-bundle \
+  --from-file=ca-bundle.crt=./combined-ca.crt \
+  --namespace gitlab-runner
+```
+
+```yaml
+# values.yaml
+certsSecretName: "gitlab-ca-bundle"
+
+runners:
+  config: |
+    [[runners]]
+      tls-ca-file = "/home/gitlab-runner/.gitlab-runner/certs/ca-bundle.crt"
+      # ... остальные настройки
+```
+
+## Обновление deployment.yml для корректной работы с сертификатами
+
+Убедитесь, что у вас есть правильная конфигурация volumes:
+
+```yaml
+# В deployment.yml
+spec:
+  template:
+    spec:
+      containers:
+      - name: gitlab-runner
+        volumeMounts:
+        # Монтирование сертификатов
+        - name: custom-certs
+          mountPath: /home/gitlab-runner/.gitlab-runner/certs/
+          readOnly: true
+        # Монтирование системных CA (опционально)
+        - name: ca-certificates
+          mountPath: /etc/ssl/certs/
+          readOnly: true
+      volumes:
+      # Ваши корпоративные сертификаты
+      - name: custom-certs
+        secret:
+          secretName: {{ .Values.certsSecretName }}
+          defaultMode: 0644
+      # Системные CA сертификаты (опционально)
+      - name: ca-certificates
+        hostPath:
+          path: /etc/ssl/certs/
+```
+
+## Применение изменений
+
+```bash
+# Обновите конфигурацию
+helm upgrade gitlab-runner gitlab/gitlab-runner \
+  --namespace gitlab-runner \
+  --values values.yaml
+
+# Проверьте логи
+kubectl logs -n gitlab-runner -l app=gitlab-runner -f
+
+# Проверьте, что сертификат доступен в контейнере
+kubectl exec -it deployment/gitlab-runner -n gitlab-runner -- \
+  ls -la /home/gitlab-runner/.gitlab-runner/certs/
+
+# Проверьте содержимое сертификата
+kubectl exec -it deployment/gitlab-runner -n gitlab-runner -- \
+  openssl x509 -in /home/gitlab-runner/.gitlab-runner/certs/my.company.com.crt -text -noout
+```
+
+## Проверка подключения
+
+```bash
+# Тест подключения к GitLab из пода
+kubectl exec -it deployment/gitlab-runner -n gitlab-runner -- \
+  curl -v https://mygitlab.company.com/api/v4/runners/verify
+
+# Проверка регистрации runner'а
+kubectl exec -it deployment/gitlab-runner -n gitlab-runner -- \
+  gitlab-runner verify
+```
+
+## Troubleshooting
+
+### 1. Проверьте правильность сертификата
+```bash
+# Проверьте, что сертификат читается корректно
+openssl x509 -in gitlab-ca.crt -text -noout
+
+# Проверьте цепочку сертификатов
+openssl s_client -showcerts -connect mygitlab.company.com:443
+```
+
+### 2. Проверьте формат сертификата
+```bash
+# Сертификат должен быть в PEM формате
+head -n 5 gitlab-ca.crt
+# Должно начинаться с -----BEGIN CERTIFICATE-----
+```
+
+### 3. Убедитесь, что Secret создан правильно
+```bash
+kubectl get secret my.company.com.crt -n gitlab-runner -o yaml
+```
+
+### 4. Проверьте права доступа
+```bash
+kubectl exec -it deployment/gitlab-runner -n gitlab-runner -- \
+  ls -la /home/gitlab-runner/.gitlab-runner/certs/
+```
+
+## Рекомендации
+
+1. **Используйте решение 1** для production окружения
+2. **Никогда не используйте tls-verify = false** в production
+3. **Регулярно обновляйте корневые сертификаты** CA
+4. **Используйте автоматическое обновление сертификатов** если возможно
