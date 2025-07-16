@@ -1,0 +1,64 @@
+#!/bin/bash
+
+# ========== СОЗДАНИЕ БАЗ ДАННЫХ И ПОЛЬЗОВАТЕЛЕЙ ==========
+
+# Создание баз данных
+echo "Создание баз данных..."
+createdb -h srv1.company.com -U postgres -W mydb1
+createdb -h srv1.company.com -U postgres -W mydb2
+
+# Альтернативный способ через psql (один раз подключиться и выполнить несколько команд)
+psql -h srv1.company.com -U postgres -W -c "CREATE DATABASE mydb1;"
+psql -h srv1.company.com -U postgres -W -c "CREATE DATABASE mydb2;"
+
+# Создание пользователей
+echo "Создание пользователей..."
+psql -h srv1.company.com -U postgres -W -c "CREATE USER myuser1 WITH PASSWORD 'myuserpass1';"
+psql -h srv1.company.com -U postgres -W -c "CREATE USER myuser2 WITH PASSWORD 'myuserpass2';"
+
+# Предоставление прав пользователям на базы данных (опционально)
+echo "Предоставление прав..."
+psql -h srv1.company.com -U postgres -W -c "GRANT ALL PRIVILEGES ON DATABASE mydb1 TO myuser1;"
+psql -h srv1.company.com -U postgres -W -c "GRANT ALL PRIVILEGES ON DATABASE mydb2 TO myuser2;"
+
+# ========== УДАЛЕНИЕ БАЗ ДАННЫХ И ПОЛЬЗОВАТЕЛЕЙ ==========
+
+# Удаление баз данных
+echo "Удаление баз данных..."
+dropdb -h srv1.company.com -U postgres -W mydb1
+dropdb -h srv1.company.com -U postgres -W mydb2
+
+# Альтернативный способ через psql
+psql -h srv1.company.com -U postgres -W -c "DROP DATABASE mydb1;"
+psql -h srv1.company.com -U postgres -W -c "DROP DATABASE mydb2;"
+
+# Удаление пользователей
+echo "Удаление пользователей..."
+psql -h srv1.company.com -U postgres -W -c "DROP USER myuser1;"
+psql -h srv1.company.com -U postgres -W -c "DROP USER myuser2;"
+
+# ========== АВТОМАТИЗАЦИЯ БЕЗ ИНТЕРАКТИВНОГО ВВОДА ПАРОЛЯ ==========
+
+# Вариант 1: Использование переменной окружения
+export PGPASSWORD=mypass
+
+# Теперь можно выполнять команды без флага -W
+createdb -h srv1.company.com -U postgres mydb1
+createdb -h srv1.company.com -U postgres mydb2
+psql -h srv1.company.com -U postgres -c "CREATE USER myuser1 WITH PASSWORD 'myuserpass1';"
+psql -h srv1.company.com -U postgres -c "CREATE USER myuser2 WITH PASSWORD 'myuserpass2';"
+
+# Вариант 2: Использование файла .pgpass
+# Создать файл ~/.pgpass с содержимым:
+# srv1.company.com:5432:*:postgres:mypass
+# chmod 600 ~/.pgpass
+
+# Вариант 3: Все команды в одном подключении
+psql -h srv1.company.com -U postgres -W << EOF
+CREATE DATABASE mydb1;
+CREATE DATABASE mydb2;
+CREATE USER myuser1 WITH PASSWORD 'myuserpass1';
+CREATE USER myuser2 WITH PASSWORD 'myuserpass2';
+GRANT ALL PRIVILEGES ON DATABASE mydb1 TO myuser1;
+GRANT ALL PRIVILEGES ON DATABASE mydb2 TO myuser2;
+EOF
