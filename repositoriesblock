@@ -1,0 +1,213 @@
+Для удаления или комментирования блока `repositories` в файле `build.gradle` из bash, учитывая многострочность и необходимость точного совпадения, можно использовать несколько подходов:Также вот более простой однострочный вариант для быстрого использования в пайплайне:**Рекомендации для использования в Docker-пайплайне:**
+
+1. **Самый надежный вариант** - используйте Python-скрипт (вариант 3 из однострочных команд), так как он наиболее точно находит нужный блок.
+
+2. **Для быстрого решения** - используйте perl-вариант (вариант 2).
+
+3. **Если нужно безопасно закомментировать** - используйте awk-вариант (вариант 4).
+
+**Использование в пайплайне:**
+
+```bash
+# Перед изменением создайте резервную копию
+cp build.gradle build.gradle.backup
+
+# Выполните одну из команд выше
+# Например, Python-вариант:
+python3 -c "
+import re
+with open('build.gradle', 'r') as f: content = f.read()
+pattern = r'repositories\s*\{\s*maven\s*\{\s*url\s*\"\$\{nexus_url\}/maven-public\".*?allowInsecureProtocol\s+true.*?content\s*\{.*?excludeGroupByRegex.*?\}\s*\}\s*\}'
+new_content = re.sub(pattern, '', content, flags=re.MULTILINE | re.DOTALL)
+with open('build.gradle', 'w') as f: f.write(new_content)
+"
+
+# Проверьте результат
+echo "Изменения выполнены, проверьте build.gradle"
+```
+
+Эти решения учитывают многострочность блока и правильное сопоставление скобок, что должно безопасно удалить именно нужный блок `repositories` с вашими параметрами.
+
+
+
+
+
+#############################################
+
+#!/bin/bash
+
+# Метод 1: Удаление блока с помощью sed (самый надежный)
+remove_repositories_block() {
+    local file="$1"
+    
+    # Создаем временный файл
+    local temp_file=$(mktemp)
+    
+    # Используем sed для удаления блока между началом repositories и соответствующей закрывающей скобкой
+    sed '/repositories {/,/^[[:space:]]*}[[:space:]]*$/{
+        /repositories {/,/^[[:space:]]*}[[:space:]]*$/{
+            /maven {/,/^[[:space:]]*}[[:space:]]*$/{
+                /url.*nexus_url.*maven-public/,/^[[:space:]]*}[[:space:]]*$/{
+                    d
+                }
+            }
+        }
+    }' "$file" > "$temp_file"
+    
+    # Заменяем оригинальный файл
+    mv "$temp_file" "$file"
+}
+
+# Метод 2: Комментирование блока (более безопасный)
+comment_repositories_block() {
+    local file="$1"
+    
+    # Создаем временный файл
+    local temp_file=$(mktemp)
+    
+    # Находим начало блока repositories с nexus_url и комментируем до соответствующей закрывающей скобки
+    awk '
+    BEGIN { in_repos = 0; brace_count = 0; start_line = 0 }
+    
+    /repositories {/ && !in_repos {
+        start_line = NR
+        in_repos = 1
+        brace_count = 1
+        print "// " $0
+        next
+    }
+    
+    in_repos && /nexus_url.*maven-public/ {
+        found_nexus = 1
+    }
+    
+    in_repos {
+        # Подсчитываем скобки
+        gsub(/[^{]/, "", temp1); gsub(/[^}]/, "", temp2)
+        brace_count += length(temp1) - length(temp2)
+        temp1 = $0; temp2 = $0
+        
+        print "// " $0
+        
+        if (brace_count == 0) {
+            in_repos = 0
+            found_nexus = 0
+        }
+        next
+    }
+    
+    { print }
+    ' "$file" > "$temp_file"
+    
+    # Заменяем оригинальный файл
+    mv "$temp_file" "$file"
+}
+
+# Метод 3: Более точное удаление с помощью perl
+remove_repositories_block_perl() {
+    local file="$1"
+    
+    perl -i -0777 -pe '
+        s/repositories\s*\{\s*maven\s*\{\s*url\s*"\$\{nexus_url\}\/maven-public"[^}]*allowInsecureProtocol\s+true[^}]*content\s*\{[^}]*excludeGroupByRegex[^}]*\}[^}]*\}[^}]*\}//gms
+    ' "$file"
+}
+
+# Метод 4: Самый надежный - поиск точного блока и его удаление
+remove_exact_repositories_block() {
+    local file="$1"
+    
+    # Создаем временный файл с escaped pattern
+    local temp_file=$(mktemp)
+    
+    # Многострочный поиск и замена
+    python3 -c "
+import re
+import sys
+
+with open('$file', 'r') as f:
+    content = f.read()
+
+# Паттерн для поиска точного блока
+pattern = r'''repositories\s*\{\s*maven\s*\{\s*url\s*\"\$\{nexus_url\}/maven-public\"\s*allowInsecureProtocol\s+true\s*content\s*\{\s*excludeGroupByRegex\s*\"com\\\\\.ctt\\\\\.soft123\.\*\"\s*excludeGroupByRegex\s*\"com\\\\\.oss\.\*\"\s*excludeGroupByRegex\s*\"com\\\\\.hello\.\*\"\s*\}\s*\}\s*\}'''
+
+# Удаляем блок
+new_content = re.sub(pattern, '', content, flags=re.MULTILINE | re.DOTALL)
+
+with open('$file', 'w') as f:
+    f.write(new_content)
+"
+}
+
+# Основная функция для использования
+main() {
+    local gradle_file="${1:-build.gradle}"
+    
+    if [[ ! -f "$gradle_file" ]]; then
+        echo "Файл $gradle_file не найден!"
+        exit 1
+    fi
+    
+    # Создаем резервную копию
+    cp "$gradle_file" "${gradle_file}.backup"
+    
+    echo "Удаляю блок repositories из $gradle_file..."
+    
+    # Выбираем метод (рекомендуется метод 4 для точности)
+    if command -v python3 >/dev/null 2>&1; then
+        remove_exact_repositories_block "$gradle_file"
+    else
+        comment_repositories_block "$gradle_file"
+    fi
+    
+    echo "Готово! Резервная копия сохранена как ${gradle_file}.backup"
+}
+
+# Запуск если скрипт выполняется напрямую
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
+############################################
+
+# Вариант 1: Использование sed (комментирование)
+sed -i '/repositories {/,/^[[:space:]]*}[[:space:]]*$/{s/^/\/\/ /}' build.gradle
+
+# Вариант 2: Использование perl для точного удаления
+perl -i -0777 -pe 's/repositories\s*\{\s*maven\s*\{\s*url\s*"\$\{nexus_url\}\/maven-public".*?\}\s*\}//gms' build.gradle
+
+# Вариант 3: Использование python для самого точного удаления
+python3 -c "
+import re
+with open('build.gradle', 'r') as f: content = f.read()
+pattern = r'repositories\s*\{\s*maven\s*\{\s*url\s*\"\$\{nexus_url\}/maven-public\".*?allowInsecureProtocol\s+true.*?content\s*\{.*?excludeGroupByRegex.*?\}\s*\}\s*\}'
+new_content = re.sub(pattern, '', content, flags=re.MULTILINE | re.DOTALL)
+with open('build.gradle', 'w') as f: f.write(new_content)
+"
+
+# Вариант 4: Безопасное комментирование с awk
+awk '
+BEGIN { in_block = 0; brace_count = 0 }
+/repositories {/ && !in_block {
+    if (getline next_line > 0) {
+        if (next_line ~ /maven {/) {
+            in_block = 1
+            brace_count = 1
+            print "// " $0
+            print "// " next_line
+            next
+        } else {
+            print
+            print next_line
+            next
+        }
+    }
+}
+in_block {
+    gsub(/[^{]/, "", temp1); gsub(/[^}]/, "", temp2)
+    brace_count += length(temp1) - length(temp2)
+    temp1 = $0; temp2 = $0
+    print "// " $0
+    if (brace_count == 0) in_block = 0
+    next
+}
+{ print }
+' build.gradle > build.gradle.tmp && mv build.gradle.tmp build.gradle
