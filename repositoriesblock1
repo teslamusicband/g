@@ -1,0 +1,137 @@
+Проблема в том, что sed с паттерном `/repositories {/,/^[[:space:]]*}[[:space:]]*$/` находит первую закрывающую скобку на уровне отступа, но не учитывает вложенность. Нужно более сложное решение:Лучший вариант для вашей задачи - **вариант 4 с awk**. Он правильно считает скобки и закомментирует весь блок `repositories` целиком:
+
+```bash
+awk '
+BEGIN { in_repos = 0; brace_count = 0; start_indent = 0 }
+
+/^[[:space:]]*repositories[[:space:]]*\{/ && !in_repos {
+    match($0, /^[[:space:]]*/); 
+    start_indent = RLENGTH
+    in_repos = 1
+    brace_count = 1
+    print "// " $0
+    next
+}
+
+in_repos {
+    # Подсчитываем открывающие и закрывающие скобки в текущей строке
+    open_braces = gsub(/\{/, "&", $0)
+    close_braces = gsub(/\}/, "&", $0)
+    brace_count += (open_braces - close_braces)
+    
+    print "// " $0
+    
+    # Если счетчик скобок достиг 0, блок repositories закончен
+    if (brace_count == 0) {
+        in_repos = 0
+    }
+    next
+}
+
+{ print }
+' build.gradle > build.gradle.tmp && mv build.gradle.tmp build.gradle
+```
+
+Этот скрипт:
+1. Находит строку с `repositories {`
+2. Начинает считать открывающие и закрывающие скобки
+3. Комментирует каждую строку внутри блока
+4. Завершает комментирование когда количество открывающих и закрывающих скобок сравнивается (brace_count = 0)
+
+Для вашего примера с двумя maven-блоками это закомментирует весь блок `repositories` полностью, включая все внутренние maven-блоки и финальную закрывающую скобку.
+
+**Альтернативный простой вариант для удаления (не комментирования):**
+
+```bash
+# Удаление всего блока repositories
+awk '
+BEGIN { in_repos = 0; brace_count = 0 }
+/^[[:space:]]*repositories[[:space:]]*\{/ && !in_repos {
+    in_repos = 1
+    brace_count = 1
+    next
+}
+in_repos {
+    open_braces = gsub(/\{/, "&", $0)
+    close_braces = gsub(/\}/, "&", $0)
+    brace_count += (open_braces - close_braces)
+    if (brace_count == 0) {
+        in_repos = 0
+    }
+    next
+}
+{ print }
+' build.gradle > build.gradle.tmp && mv build.gradle.tmp build.gradle
+```
+
+##############################
+
+# Вариант 1: Использование sed (комментирование) - ИСПРАВЛЕННЫЙ
+sed -i '/repositories {/{:a;N;/^[[:space:]]*}[[:space:]]*$/!ba;s/^/\/\/ /gm}' build.gradle
+
+# Вариант 2: Использование perl для точного удаления
+perl -i -0777 -pe 's/repositories\s*\{\s*maven\s*\{\s*url\s*"\$\{nexus_url\}\/maven-public".*?\}\s*\}//gms' build.gradle
+
+# Вариант 3: Использование python для самого точного удаления
+python3 -c "
+import re
+with open('build.gradle', 'r') as f: content = f.read()
+pattern = r'repositories\s*\{\s*maven\s*\{\s*url\s*\"\$\{nexus_url\}/maven-public\".*?allowInsecureProtocol\s+true.*?content\s*\{.*?excludeGroupByRegex.*?\}\s*\}\s*\}'
+new_content = re.sub(pattern, '', content, flags=re.MULTILINE | re.DOTALL)
+with open('build.gradle', 'w') as f: f.write(new_content)
+"
+
+# Вариант 4: Правильное комментирование всего блока repositories с awk
+awk '
+BEGIN { in_repos = 0; brace_count = 0; start_indent = 0 }
+
+/^[[:space:]]*repositories[[:space:]]*\{/ && !in_repos {
+    match($0, /^[[:space:]]*/); 
+    start_indent = RLENGTH
+    in_repos = 1
+    brace_count = 1
+    print "// " $0
+    next
+}
+
+in_repos {
+    # Подсчитываем открывающие и закрывающие скобки в текущей строке
+    open_braces = gsub(/\{/, "&", $0)
+    close_braces = gsub(/\}/, "&", $0)
+    brace_count += (open_braces - close_braces)
+    
+    print "// " $0
+    
+    # Если счетчик скобок достиг 0, блок repositories закончен
+    if (brace_count == 0) {
+        in_repos = 0
+    }
+    next
+}
+
+{ print }
+' build.gradle > build.gradle.tmp && mv build.gradle.tmp build.gradle
+
+# Вариант 5: Еще более точный sed для комментирования
+sed -i '
+/^[[:space:]]*repositories[[:space:]]*{/ {
+    :loop
+    s/^/\/\/ /
+    n
+    /^[[:space:]]*}[[:space:]]*$/ {
+        s/^/\/\/ /
+        b end
+    }
+    b loop
+    :end
+}
+' build.gradle
+##############################
+
+
+##############################
+
+
+
+
+
