@@ -1,0 +1,31 @@
+Вот несколько способов заменить эту строку в bash:
+
+**1. С помощью sed (для замены в файле):**
+```bash
+sed -i 's|nexus_url=https://nexus-cache\.services\.mycompany\.com/repository|nexus_url=https://nexus.services.mycompany.com/repository|g' filename
+```
+
+**2. С помощью sed (вывод в stdout):**
+```bash
+sed 's|nexus_url=https://nexus-cache\.services\.mycompany\.com/repository|nexus_url=https://nexus.services.mycompany.com/repository|g' filename
+```
+
+**3. Если строка в переменной:**
+```bash
+string="nexus_url=https://nexus-cache.services.mycompany.com/repository"
+new_string="${string/nexus-cache.services/nexus.services}"
+echo "$new_string"
+```
+
+**4. Более простая замена через sed (заменяем только часть URL):**
+```bash
+sed -i 's|nexus-cache\.services|nexus.services|g' filename
+```
+
+**Объяснение:**
+- Используется разделитель `|` вместо `/` чтобы не экранировать слеши в URL
+- Точки экранируются как `\.` в регулярных выражениях
+- Флаг `-i` изменяет файл на месте
+- Флаг `g` заменяет все вхождения в строке
+
+Самый простой и безопасный вариант - четвертый, так как он заменяет только отличающуюся часть URL.
