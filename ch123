@@ -1,0 +1,58 @@
+Для установки ClickHouse клиента в GitLab Runner в Kubernetes, вы можете использовать следующие команды bash:
+
+## Способ 1: Установка через официальный репозиторий (рекомендуется)
+
+```bash
+# Добавить официальный репозиторий ClickHouse
+curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg] https://packages.clickhouse.com/deb stable main" | tee /etc/apt/sources.list.d/clickhouse.list
+
+# Обновить пакеты и установить клиент
+apt-get update
+apt-get install -y clickhouse-client
+```
+
+## Способ 2: Установка через snap (если доступен)
+
+```bash
+apt-get update
+apt-get install -y snapd
+snap install clickhouse
+```
+
+## Способ 3: Прямая загрузка бинарного файла
+
+```bash
+# Скачать и установить бинарный файл
+curl -O 'https://builds.clickhouse.com/master/amd64/clickhouse' && chmod a+x ./clickhouse
+mv ./clickhouse /usr/local/bin/clickhouse-client
+```
+
+## Способ 4: Для Alpine Linux (если используется alpine-based образ)
+
+```bash
+apk update
+apk add --no-cache curl
+curl -O 'https://builds.clickhouse.com/master/amd64/clickhouse' && chmod a+x ./clickhouse
+mv ./clickhouse /usr/local/bin/clickhouse-client
+```
+
+## Пример использования в .gitlab-ci.yml
+
+```yaml
+test_clickhouse:
+  stage: test
+  image: ubuntu:20.04
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq curl gnupg2
+    - curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
+    - echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg] https://packages.clickhouse.com/deb stable main" | tee /etc/apt/sources.list.d/clickhouse.list
+    - apt-get update -qq
+    - apt-get install -y -qq clickhouse-client
+  script:
+    - clickhouse-client --version
+    - clickhouse-client --host your-clickhouse-host --query "SELECT 1"
+```
+
+Выбирайте способ в зависимости от базового образа вашего runner'а. Первый способ наиболее надежный для Ubuntu/Debian систем.
