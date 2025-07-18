@@ -1,0 +1,117 @@
+# ===== КОМАНДЫ ДЛЯ BASH КОНСОЛИ =====
+
+# 1. Удаление базы данных
+clickhouse-client --host cluster1 --query "DROP DATABASE IF EXISTS database1"
+
+# 2. Удаление пользователя
+clickhouse-client --host cluster1 --query "DROP USER IF EXISTS user1"
+
+# 3. Создание базы данных
+clickhouse-client --host cluster1 --query "CREATE DATABASE database1"
+
+# 4. Создание пользователя
+clickhouse-client --host cluster1 --query "CREATE USER user1 IDENTIFIED BY 'password123'"
+
+# 5. Выдача прав пользователю на базу данных
+clickhouse-client --host cluster1 --query "GRANT ALL ON database1.* TO user1"
+
+# ===== СКРИПТ ДЛЯ ПОЛНОГО ПЕРЕСОЗДАНИЯ =====
+#!/bin/bash
+
+CLUSTER_HOST="cluster1"
+DB_NAME="database1"
+USER_NAME="user1"
+USER_PASSWORD="password123"
+
+echo "Удаляем базу данных $DB_NAME..."
+clickhouse-client --host $CLUSTER_HOST --query "DROP DATABASE IF EXISTS $DB_NAME"
+
+echo "Удаляем пользователя $USER_NAME..."
+clickhouse-client --host $CLUSTER_HOST --query "DROP USER IF EXISTS $USER_NAME"
+
+echo "Создаем базу данных $DB_NAME..."
+clickhouse-client --host $CLUSTER_HOST --query "CREATE DATABASE $DB_NAME"
+
+echo "Создаем пользователя $USER_NAME..."
+clickhouse-client --host $CLUSTER_HOST --query "CREATE USER $USER_NAME IDENTIFIED BY '$USER_PASSWORD'"
+
+echo "Выдаем права пользователю $USER_NAME на базу $DB_NAME..."
+clickhouse-client --host $CLUSTER_HOST --query "GRANT ALL ON $DB_NAME.* TO $USER_NAME"
+
+echo "Готово!"
+
+# ===== GITLAB CI PIPELINE (.gitlab-ci.yml) =====
+
+stages:
+  - cleanup
+  - setup
+
+variables:
+  CLICKHOUSE_HOST: "cluster1"
+  DB_NAME: "database1"
+  USER_NAME: "user1"
+  USER_PASSWORD: "password123"
+
+before_script:
+  - apt-get update -qq && apt-get install -y -qq clickhouse-client
+
+cleanup_database:
+  stage: cleanup
+  script:
+    - echo "Удаляем базу данных $DB_NAME..."
+    - clickhouse-client --host $CLICKHOUSE_HOST --query "DROP DATABASE IF EXISTS $DB_NAME"
+    - echo "Удаляем пользователя $USER_NAME..."
+    - clickhouse-client --host $CLICKHOUSE_HOST --query "DROP USER IF EXISTS $USER_NAME"
+  only:
+    - master
+    - develop
+
+setup_database:
+  stage: setup
+  script:
+    - echo "Создаем базу данных $DB_NAME..."
+    - clickhouse-client --host $CLICKHOUSE_HOST --query "CREATE DATABASE $DB_NAME"
+    - echo "Создаем пользователя $USER_NAME..."
+    - clickhouse-client --host $CLICKHOUSE_HOST --query "CREATE USER $USER_NAME IDENTIFIED BY '$USER_PASSWORD'"
+    - echo "Выдаем права пользователю $USER_NAME на базу $DB_NAME..."
+    - clickhouse-client --host $CLICKHOUSE_HOST --query "GRANT ALL ON $DB_NAME.* TO $USER_NAME"
+    - echo "Проверяем подключение..."
+    - clickhouse-client --host $CLICKHOUSE_HOST --user $USER_NAME --password $USER_PASSWORD --query "SHOW DATABASES"
+  dependencies:
+    - cleanup_database
+  only:
+    - master
+    - develop
+
+# ===== АЛЬТЕРНАТИВНЫЙ ВАРИАНТ С СЕКРЕТАМИ =====
+# Если используете GitLab CI Variables для хранения паролей:
+
+setup_database_with_secrets:
+  stage: setup
+  script:
+    - echo "Создаем базу данных $DB_NAME..."
+    - clickhouse-client --host $CLICKHOUSE_HOST --query "CREATE DATABASE $DB_NAME"
+    - echo "Создаем пользователя $USER_NAME..."
+    - clickhouse-client --host $CLICKHOUSE_HOST --query "CREATE USER $USER_NAME IDENTIFIED BY '$CLICKHOUSE_PASSWORD'"
+    - echo "Выдаем права пользователю $USER_NAME на базу $DB_NAME..."
+    - clickhouse-client --host $CLICKHOUSE_HOST --query "GRANT ALL ON $DB_NAME.* TO $USER_NAME"
+  variables:
+    CLICKHOUSE_PASSWORD: $CI_CLICKHOUSE_PASSWORD  # Переменная из GitLab CI/CD Settings
+  only:
+    - master
+
+# ===== КОМАНДЫ ДЛЯ КЛАСТЕРНОГО РАЗВЕРТЫВАНИЯ =====
+# Если cluster1 - это действительно кластер ClickHouse:
+
+# Создание базы на кластере
+clickhouse-client --host cluster1 --query "CREATE DATABASE database1 ON CLUSTER 'cluster1'"
+
+# Создание пользователя на кластере
+clickhouse-client --host cluster1 --query "CREATE USER user1 ON CLUSTER 'cluster1' IDENTIFIED BY 'password123'"
+
+# Выдача прав на кластере
+clickhouse-client --host cluster1 --query "GRANT ALL ON database1.* TO user1 ON CLUSTER 'cluster1'"
+
+# Удаление на кластере
+clickhouse-client --host cluster1 --query "DROP DATABASE IF EXISTS database1 ON CLUSTER 'cluster1'"
+clickhouse-client --host cluster1 --query "DROP USER IF EXISTS user1 ON CLUSTER 'cluster1'"
