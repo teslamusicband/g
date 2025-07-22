@@ -1,0 +1,1542 @@
+Отличный вопрос! ArgoCD CLI предоставляет много возможностей для селективного управления ресурсами. Вот подробная шпаргалка:Теперь создам дополнительный файл с практическими примерами для вашего случая с Spark:Вот полный набор команд ArgoCD CLI для селективного управления ресурсами:
+
+## Ключевые возможности для селективного управления:
+
+### 1. **Селективное удаление (Foreground Delete)**
+```bash
+# Удаление конкретного типа ресурсов
+argocd app delete-resource <APP_NAME> --kind SparkApplication --force
+
+# Удаление с Foreground propagation
+argocd app delete-resource <APP_NAME> \
+  --kind SparkApplication \
+  --name spark-job-1 \
+  --propagation-policy Foreground
+```
+
+### 2. **Селективная синхронизация**
+```bash
+# Синхронизация только определенных типов ресурсов
+argocd app sync <APP_NAME> --kind SparkApplication --kind ConfigMap
+
+# Синхронизация конкретного ресурса
+argocd app sync <APP_NAME> \
+  --resource SparkApplication:namespace:resource-name
+```
+
+### 3. **Фильтрация по типам ресурсов**
+```bash
+# Список ресурсов конкретного типа
+argocd app resources <APP_NAME> --kind SparkApplication
+argocd app resources <APP_NAME> --kind Deployment --kind Service
+```
+
+### 4. **Работа с тегами/labels**
+В манифестах можно добавлять labels для селективного управления:
+```yaml
+metadata:
+  labels:
+    deletion.policy: cascade
+    restart.policy: always
+    spark.job.type: etl
+```
+
+Затем удалять через kubectl по селектору:
+```bash
+kubectl delete sparkapplication -l spark.job.type=etl -n namespace
+```
+
+### 5. **Практические сценарии для Spark**
+- **Полный рестарт всех Spark приложений**
+- **Селективный рестарт по типу задач** (ETL, streaming, ML)
+- **Условный рестарт только упавших приложений**
+- **Мониторинг и диагностика статуса**
+
+Основные команды работают
+
+
+###################################################
+# ====================================================================
+# ARGOCD CLI COMMANDS REFERENCE - ПОЛНАЯ ШПАРГАЛКА
+# ====================================================================
+
+# ====================================================================
+# БАЗОВЫЕ КОМАНДЫ
+# ====================================================================
+
+# Логин и настройка
+argocd login <SERVER> --username <USER> --password <PASS>
+argocd login <SERVER> --auth-token <TOKEN>
+argocd login <SERVER> --sso --insecure
+argocd logout <SERVER>
+
+# Информация о контексте
+argocd context
+argocd context <SERVER>
+argocd version
+
+# ====================================================================
+# УПРАВЛЕНИЕ ПРИЛОЖЕНИЯМИ
+# ====================================================================
+
+# Создание приложения
+argocd app create <APP_NAME> \
+  --repo <REPO_URL> \
+  --path <PATH> \
+  --dest-server <K8S_SERVER> \
+  --dest-namespace <NAMESPACE> \
+  --sync-policy automated \
+  --auto-prune \
+  --self-heal
+
+# Список приложений
+argocd app list
+argocd app list -o json
+argocd app list -o yaml
+argocd app list --selector app.kubernetes.io/name=myapp
+
+# Получение информации о приложении
+argocd app get <APP_NAME>
+argocd app get <APP_NAME> -o json
+argocd app get <APP_NAME> -o yaml
+argocd app get <APP_NAME> --refresh         # Обычный refresh
+argocd app get <APP_NAME> --hard-refresh    # Принудительный refresh из Git
+
+# ====================================================================
+# СЕЛЕКТИВНОЕ УПРАВЛЕНИЕ РЕСУРСАМИ
+# ====================================================================
+
+# ЛИСТИНГ РЕСУРСОВ С ФИЛЬТРАЦИЕЙ
+# --------------------------------
+# Показать все ресурсы приложения
+argocd app resources <APP_NAME>
+
+# Показать ресурсы по типу
+argocd app resources <APP_NAME> --kind Deployment
+argocd app resources <APP_NAME> --kind Service
+argocd app resources <APP_NAME> --kind ConfigMap
+argocd app resources <APP_NAME> --kind "SparkApplication"
+argocd app resources <APP_NAME> --kind StatefulSet
+
+# Показать ресурсы в конкретном namespace
+argocd app resources <APP_NAME> --namespace <NS>
+
+# Показать ресурсы по имени (regex поддерживается)
+argocd app resources <APP_NAME> --name <RESOURCE_NAME>
+argocd app resources <APP_NAME> --name "spark-.*"
+
+# Комбинированная фильтрация
+argocd app resources <APP_NAME> --kind Deployment --namespace production
+
+# СЕЛЕКТИВНОЕ УДАЛЕНИЕ (Foreground Delete)
+# ----------------------------------------
+# Удаление конкретного ресурса
+argocd app delete-resource <APP_NAME> \
+  --kind <KIND> \
+  --name <RESOURCE_NAME> \
+  --namespace <NAMESPACE> \
+  --force
+
+# Удаление всех ресурсов определенного типа
+argocd app delete-resource <APP_NAME> --kind SparkApplication --force
+
+# Удаление с propagation policy
+argocd app delete-resource <APP_NAME> \
+  --kind Deployment \
+  --name spark-driver \
+  --propagation-policy Foreground
+
+# Удаление множественных ресурсов по паттерну
+for resource in $(argocd app resources <APP_NAME> --kind SparkApplication -o name); do
+  argocd app delete-resource <APP_NAME> --kind SparkApplication --name $resource --force
+done
+
+# СЕЛЕКТИВНАЯ СИНХРОНИЗАЦИЯ
+# --------------------------
+# Синхронизация конкретного ресурса
+argocd app sync <APP_NAME> \
+  --resource <KIND>:<NAMESPACE>:<NAME>
+
+# Синхронизация множественных ресурсов
+argocd app sync <APP_NAME> \
+  --resource Deployment:default:app1 \
+  --resource Service:default:app1-svc
+
+# Синхронизация только определенных типов ресурсов
+argocd app sync <APP_NAME> --kind Deployment
+argocd app sync <APP_NAME> --kind ConfigMap --kind Secret
+
+# Синхронизация с различными стратегиями
+argocd app sync <APP_NAME> --strategy apply          # kubectl apply
+argocd app sync <APP_NAME> --strategy hook           # только hooks
+argocd app sync <APP_NAME> --replace                 # kubectl replace
+argocd app sync <APP_NAME> --force                   # принудительная
+argocd app sync <APP_NAME> --prune                   # с удалением лишних
+argocd app sync <APP_NAME> --dry-run                 # тестовый прогон
+
+# СЕЛЕКТИВНЫЙ REFRESH
+# -------------------
+# Refresh конкретного ресурса (только для некоторых типов)
+argocd app get <APP_NAME> --refresh --resource-version <VERSION>
+
+# Hard refresh всего приложения
+argocd app get <APP_NAME> --hard-refresh
+
+# ====================================================================
+# РАБОТА С ТЕГАМИ И LABELS
+# ====================================================================
+
+# В манифесте Kubernetes можно использовать labels для фильтрации:
+# apiVersion: v1
+# kind: Pod
+# metadata:
+#   name: spark-driver
+#   labels:
+#     app.kubernetes.io/component: spark
+#     environment: production
+#     deletion.policy: "cascade"
+#     sync.policy: "manual"
+
+# Получение ресурсов по labels через kubectl в рамках ArgoCD
+argocd app get <APP_NAME> --show-managed-fields
+
+# Патчинг ресурса для добавления labels
+argocd app patch-resource <APP_NAME> \
+  --kind Deployment \
+  --name <NAME> \
+  --patch '{"metadata":{"labels":{"deletion.policy":"cascade"}}}' \
+  --patch-type merge
+
+# ====================================================================
+# ПРОДВИНУТЫЕ ОПЕРАЦИИ С РЕСУРСАМИ
+# ====================================================================
+
+# PATCH ОПЕРАЦИИ
+# --------------
+# JSON Patch
+argocd app patch-resource <APP_NAME> \
+  --kind Deployment \
+  --name <NAME> \
+  --patch '{"spec":{"replicas":0}}' \
+  --patch-type json
+
+# Strategic Merge Patch
+argocd app patch-resource <APP_NAME> \
+  --kind Deployment \
+  --name <NAME> \
+  --patch '{"spec":{"replicas":3}}' \
+  --patch-type strategic
+
+# Merge Patch
+argocd app patch-resource <APP_NAME> \
+  --kind Service \
+  --name <NAME> \
+  --patch '{"metadata":{"labels":{"version":"v2"}}}' \
+  --patch-type merge
+
+# ДЕЙСТВИЯ С РЕСУРСАМИ
+# --------------------
+# Получение манифеста ресурса
+argocd app manifests <APP_NAME>
+argocd app manifests <APP_NAME> --source live    # live состояние
+argocd app manifests <APP_NAME> --source git     # состояние в git
+
+# Получение различий
+argocd app diff <APP_NAME>
+argocd app diff <APP_NAME> --local-repo-root .   # с локальными изменениями
+
+# Терминирование операций
+argocd app terminate-op <APP_NAME> <OPERATION_ID>
+
+# ====================================================================
+# МАССОВЫЕ ОПЕРАЦИИ
+# ====================================================================
+
+# BULK ОПЕРАЦИИ
+# -------------
+# Синхронизация множественных приложений
+argocd app sync app1 app2 app3
+
+# Операции со всеми приложениями в проекте
+argocd app list -o name | xargs argocd app sync
+
+# Операции с приложениями по селектору
+argocd app list --selector environment=production -o name | xargs argocd app get
+
+# СКРИПТЫ ДЛЯ СЕЛЕКТИВНЫХ ОПЕРАЦИЙ
+# ---------------------------------
+# Удаление всех SparkApplication ресурсов
+#!/bin/bash
+APP_NAME="my-app"
+RESOURCES=$(argocd app resources $APP_NAME --kind SparkApplication -o name)
+for resource in $RESOURCES; do
+  echo "Deleting $resource"
+  argocd app delete-resource $APP_NAME --kind SparkApplication --name $resource --force
+done
+
+# Синхронизация только Deployments и Services
+#!/bin/bash
+APP_NAME="my-app"
+argocd app sync $APP_NAME --kind Deployment --kind Service --prune
+
+# Удаление ресурсов по label selector (через kubectl)
+#!/bin/bash
+APP_NAME="my-app"
+NAMESPACE="default"
+# Сначала получаем namespace приложения
+NS=$(argocd app get $APP_NAME -o json | jq -r '.spec.destination.namespace')
+# Удаляем ресурсы с определенным label
+kubectl delete all -l deletion.policy=cascade -n $NS
+
+# ====================================================================
+# WAIT И МОНИТОРИНГ ОПЕРАЦИЙ
+# ====================================================================
+
+# ОЖИДАНИЕ ЗАВЕРШЕНИЯ ОПЕРАЦИЙ
+# ----------------------------
+# Ожидание синхронизации
+argocd app wait <APP_NAME>
+argocd app wait <APP_NAME> --timeout 300
+argocd app wait <APP_NAME> --health
+
+# Ожидание множественных приложений
+argocd app wait app1 app2 --timeout 600
+
+# МОНИТОРИНГ СТАТУСА
+# ------------------
+# Просмотр истории синхронизации
+argocd app history <APP_NAME>
+argocd app history <APP_NAME> --revision 5
+
+# Просмотр текущих операций
+argocd app get <APP_NAME> --show-operation
+
+# Просмотр логов синхронизации
+argocd app logs <APP_NAME>
+argocd app logs <APP_NAME> --follow
+argocd app logs <APP_NAME> --tail 100
+
+# ====================================================================
+# РАБОТА С ПРОЕКТАМИ И РЕПОЗИТОРИЯМИ
+# ====================================================================
+
+# ПРОЕКТЫ
+# -------
+argocd proj list
+argocd proj get <PROJECT_NAME>
+argocd proj create <PROJECT_NAME>
+
+# РЕПОЗИТОРИИ
+# -----------
+argocd repo list
+argocd repo add <REPO_URL>
+argocd repo get <REPO_URL>
+
+# ====================================================================
+# ПРИМЕРЫ КОМПЛЕКСНЫХ СЦЕНАРИЕВ
+# ====================================================================
+
+# СЦЕНАРИЙ 1: Полный перезапуск только Spark приложений
+#!/bin/bash
+APP_NAME="data-platform"
+
+echo "=== Удаление всех Spark ресурсов ==="
+SPARK_APPS=$(argocd app resources $APP_NAME --kind SparkApplication -o name)
+for app in $SPARK_APPS; do
+  echo "Deleting SparkApplication: $app"
+  argocd app delete-resource $APP_NAME --kind SparkApplication --name $app --force
+done
+
+echo "=== Refresh приложения ==="
+argocd app get $APP_NAME --hard-refresh
+sleep 10
+
+echo "=== Синхронизация только Spark ресурсов ==="
+argocd app sync $APP_NAME --kind SparkApplication --force
+argocd app wait $APP_NAME --timeout 300
+
+# СЦЕНАРИЙ 2: Условное удаление по labels
+#!/bin/bash
+APP_NAME="microservices"
+NAMESPACE=$(argocd app get $APP_NAME -o json | jq -r '.spec.destination.namespace')
+
+echo "=== Удаление ресурсов с label deletion.policy=restart ==="
+kubectl delete all -l deletion.policy=restart -n $NAMESPACE --wait=true
+
+echo "=== Refresh и синхронизация ==="
+argocd app get $APP_NAME --hard-refresh
+sleep 15
+argocd app sync $APP_NAME --force --prune
+
+# СЦЕНАРИЙ 3: Поэтапное обновление с проверкой здоровья
+#!/bin/bash
+APP_NAME="web-app"
+
+echo "=== Синхронизация ConfigMaps и Secrets ==="
+argocd app sync $APP_NAME --kind ConfigMap --kind Secret
+argocd app wait $APP_NAME
+
+echo "=== Синхронизация Deployments ==="
+argocd app sync $APP_NAME --kind Deployment --replace
+argocd app wait $APP_NAME --health
+
+echo "=== Синхронизация Services и Ingress ==="
+argocd app sync $APP_NAME --kind Service --kind Ingress
+argocd app wait $APP_NAME
+
+echo "=== Финальная проверка ==="
+argocd app get $APP_NAME
+
+# ====================================================================
+# ПОЛЕЗНЫЕ КОМБИНАЦИИ И ТРЮКИ
+# ====================================================================
+
+# Получить список всех типов ресурсов в приложении
+argocd app resources <APP_NAME> -o json | jq -r '.[].kind' | sort -u
+
+# Получить все имена ресурсов определенного типа
+argocd app resources <APP_NAME> --kind Deployment -o json | jq -r '.[].name'
+
+# Проверить статус синхронизации для конкретных ресурсов
+argocd app get <APP_NAME> -o json | jq '.status.resources[] | select(.kind=="SparkApplication")'
+
+# Найти ресурсы в состоянии OutOfSync
+argocd app get <APP_NAME> -o json | jq '.status.resources[] | select(.status=="OutOfSync")'
+
+# Получить все приложения с проблемами
+argocd app list -o json | jq '.[] | select(.status.health.status!="Healthy" or .status.sync.status!="Synced")'
+
+###################################################
+#!/bin/bash
+# ====================================================================
+# ПРАКТИЧЕСКИЕ ПРИМЕРЫ ДЛЯ SPARK ПРИЛОЖЕНИЙ С ARGOCD
+# ====================================================================
+
+# ====================================================================
+# 1. СЕЛЕКТИВНОЕ УПРАВЛЕНИЕ SPARK ПРИЛОЖЕНИЯМИ
+# ====================================================================
+
+# Функция для получения списка SparkApplication
+get_spark_applications() {
+    local app_name=$1
+    argocd app resources "$app_name" --kind SparkApplication -o json | jq -r '.[].name'
+}
+
+# Функция для удаления всех Spark приложений
+delete_all_spark_apps() {
+    local app_name=$1
+    echo "=== Удаление всех SparkApplication в приложении $app_name ==="
+    
+    local spark_apps=$(get_spark_applications "$app_name")
+    if [ -z "$spark_apps" ]; then
+        echo "Нет SparkApplication для удаления"
+        return
+    fi
+    
+    for spark_app in $spark_apps; do
+        echo "Удаление SparkApplication: $spark_app"
+        argocd app delete-resource "$app_name" \
+            --kind SparkApplication \
+            --name "$spark_app" \
+            --force \
+            --propagation-policy Foreground
+        
+        # Ждем завершения удаления
+        echo "Ожидание завершения удаления $spark_app..."
+        timeout 120 bash -c "
+            while kubectl get sparkapplication $spark_app -n \$(argocd app get $app_name -o json | jq -r '.spec.destination.namespace') 2>/dev/null; do
+                sleep 5
+                echo 'Ожидание удаления $spark_app...'
+            done
+        "
+    done
+}
+
+# ====================================================================
+# 2. РАБОТА С ТЕГАМИ И LABELS В SPARK МАНИФЕСТАХ
+# ====================================================================
+
+# Пример манифеста SparkApplication с labels для селективного управления:
+cat << 'EOF'
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-job-etl
+  labels:
+    app.kubernetes.io/name: data-pipeline
+    app.kubernetes.io/component: etl
+    spark.job.type: batch
+    deletion.policy: cascade
+    restart.policy: always
+    environment: production
+spec:
+  # ... остальная конфигурация
+EOF
+
+# Функция для удаления Spark приложений по labels
+delete_spark_by_labels() {
+    local app_name=$1
+    local label_selector=$2
+    local namespace=$(argocd app get "$app_name" -o json | jq -r '.spec.destination.namespace')
+    
+    echo "=== Удаление SparkApplication с labels: $label_selector ==="
+    
+    # Получаем список приложений по селектору через kubectl
+    local spark_apps=$(kubectl get sparkapplication -n "$namespace" -l "$label_selector" -o name | sed 's|sparkapplication.sparkoperator.k8s.io/||')
+    
+    if [ -z "$spark_apps" ]; then
+        echo "Нет SparkApplication с указанными labels"
+        return
+    fi
+    
+    for spark_app in $spark_apps; do
+        echo "Удаление SparkApplication: $spark_app (labels: $label_selector)"
+        argocd app delete-resource "$app_name" \
+            --kind SparkApplication \
+            --name "$spark_app" \
+            --force
+    done
+}
+
+# ====================================================================
+# 3. КОМПЛЕКСНЫЕ СЦЕНАРИИ ПЕРЕЗАПУСКА
+# ====================================================================
+
+# Сценарий 1: Полный рестарт всех Spark приложений
+full_spark_restart() {
+    local app_name=$1
+    
+    echo "=== ПОЛНЫЙ РЕСТАРТ SPARK ПРИЛОЖЕНИЙ ==="
+    echo "Приложение: $app_name"
+    echo "Время начала: $(date)"
+    
+    # 1. Удаляем все SparkApplication
+    delete_all_spark_apps "$app_name"
+    
+    # 2. Hard refresh приложения
+    echo "=== Hard refresh приложения ==="
+    argocd app get "$app_name" --hard-refresh
+    sleep 15
+    
+    # 3. Проверяем статус OutOfSync
+    echo "=== Проверка статуса синхронизации ==="
+    local out_of_sync=$(argocd app get "$app_name" -o json | jq '.status.resources[] | select(.kind=="SparkApplication" and .status=="OutOfSync")' | jq length)
+    echo "Найдено SparkApplication в статусе OutOfSync: $out_of_sync"
+    
+    # 4. Синхронизируем только SparkApplication
+    echo "=== Синхронизация SparkApplication ==="
+    argocd app sync "$app_name" --kind SparkApplication --force --prune
+    
+    # 5. Ждем завершения синхронизации
+    echo "=== Ожидание завершения синхронизации ==="
+    argocd app wait "$app_name" --timeout 600
+    
+    # 6. Проверяем финальный статус
+    echo "=== Финальная проверка ==="
+    argocd app get "$app_name"
+    
+    echo "Время завершения: $(date)"
+}
+
+# Сценарий 2: Селективный рестарт по типу задач
+selective_spark_restart_by_type() {
+    local app_name=$1
+    local job_type=$2  # например: etl, streaming, ml
+    
+    echo "=== СЕЛЕКТИВНЫЙ РЕСТАРТ SPARK ПРИЛОЖЕНИЙ ТИПА: $job_type ==="
+    
+    # Удаляем приложения по label
+    delete_spark_by_labels "$app_name" "spark.job.type=$job_type"
+    
+    # Refresh и sync
+    argocd app get "$app_name" --hard-refresh
+    sleep 10
+    argocd app sync "$app_name" --kind SparkApplication --force
+    argocd app wait "$app_name" --timeout 300
+    
+    echo "=== Рестарт приложений типа $job_type завершен ==="
+}
+
+# Сценарий 3: Условный рестарт с проверкой статуса
+conditional_spark_restart() {
+    local app_name=$1
+    
+    echo "=== УСЛОВНЫЙ РЕСТАРТ SPARK ПРИЛОЖЕНИЙ ==="
+    
+    # Получаем список приложений и их статусы
+    local namespace=$(argocd app get "$app_name" -o json | jq -r '.spec.destination.namespace')
+    
+    echo "Проверка статуса SparkApplication в namespace: $namespace"
+    
+    # Находим приложения в состоянии Failed или Unknown
+    local failed_apps=$(kubectl get sparkapplication -n "$namespace" \
+        -o json | jq -r '.items[] | select(.status.applicationState.state == "FAILED" or .status.applicationState.state == "UNKNOWN") | .metadata.name')
+    
+    if [ -z "$failed_apps" ]; then
+        echo "Нет SparkApplication в проблемном состоянии"
+        return
+    fi
+    
+    echo "Найдены проблемные SparkApplication:"
+    echo "$failed_apps"
+    
+    # Удаляем только проблемные приложения
+    for failed_app in $failed_apps; do
+        echo "Удаление проблемного SparkApplication: $failed_app"
+        argocd app delete-resource "$app_name" \
+            --kind SparkApplication \
+            --name "$failed_app" \
+            --force
+    done
+    
+    # Refresh и sync
+    argocd app get "$app_name" --hard-refresh
+    sleep 15
+    argocd app sync "$app_name" --kind SparkApplication --force
+    argocd app wait "$app_name" --timeout 300
+}
+
+# ====================================================================
+# 4. МОНИТОРИНГ И ДИАГНОСТИКА
+# ====================================================================
+
+# Функция для проверки статуса всех Spark приложений
+check_spark_status() {
+    local app_name=$1
+    local namespace=$(argocd app get "$app_name" -o json | jq -r '.spec.destination.namespace')
+    
+    echo "=== СТАТУС SPARK ПРИЛОЖЕНИЙ ==="
+    echo "Приложение: $app_name"
+    echo "Namespace: $namespace"
+    echo
+    
+    # ArgoCD статус
+    echo "--- ArgoCD статус SparkApplication ---"
+    argocd app resources "$app_name" --kind SparkApplication
+    echo
+    
+    # Kubernetes статус
+    echo "--- Kubernetes статус SparkApplication ---"
+    kubectl get sparkapplication -n "$namespace" -o wide
+    echo
+    
+    # Детальный статус каждого приложения
+    echo "--- Детальный статус ---"
+    local spark_apps=$(kubectl get sparkapplication -n "$namespace" -o name | sed 's|sparkapplication.sparkoperator.k8s.io/||')
+    
+    for spark_app in $spark_apps; do
+        echo "SparkApplication: $spark_app"
+        local state=$(kubectl get sparkapplication "$spark_app" -n "$namespace" -o json | jq -r '.status.applicationState.state // "UNKNOWN"')
+        local driver_pod=$(kubectl get sparkapplication "$spark_app" -n "$namespace" -o json | jq -r '.status.driverInfo.podName // "N/A"')
+        echo "  State: $state"
+        echo "  Driver Pod: $driver_pod"
+        echo
+    done
+}
+
+# Функция для получения логов Spark приложений
+get_spark_logs() {
+    local app_name=$1
+    local spark_app_name=$2
+    local namespace=$(argocd app get "$app_name" -o json | jq -r '.spec.destination.namespace')
+    
+    echo "=== ЛОГИ SPARK ПРИЛОЖЕНИЯ: $spark_app_name ==="
+    
+    # Получаем имя driver pod
+    local driver_pod=$(kubectl get sparkapplication "$spark_app_name" -n "$namespace" -o json | jq -r '.status.driverInfo.podName')
+    
+    if [ "$driver_pod" != "null" ] && [ "$driver_pod" != "" ]; then
+        echo "Driver Pod: $driver_pod"
+        kubectl logs "$driver_pod" -n "$namespace" --tail=100
+    else
+        echo "Driver Pod не найден для $spark_app_name"
+    fi
+}
+
+# ====================================================================
+# 5. GITLAB CI INTEGRATION
+# ====================================================================
+
+# Функция для использования в GitLab CI
+gitlab_spark_restart() {
+    local app_name=${ARGOCD_APP_NAME}
+    local restart_type=${SPARK_RESTART_TYPE:-"full"}  # full, selective, conditional
+    local job_type=${SPARK_JOB_TYPE:-""}
+    
+    echo "=== GITLAB CI SPARK RESTART ==="
+    echo "Тип рестарта: $restart_type"
+    echo "Приложение: $app_name"
+    
+    case $restart_type in
+        "full")
+            full_spark_restart "$app_name"
+            ;;
+        "selective")
+            if [ -z "$job_type" ]; then
+                echo "Ошибка: для selective рестарта нужно указать SPARK_JOB_TYPE"
+                exit 1
+            fi
+            selective_spark_restart_by_type "$app_name" "$job_type"
+            ;;
+        "conditional")
+            conditional_spark_restart "$app_name"
+            ;;
+        *)
+            echo "Ошибка: неизвестный тип рестарта: $restart_type"
+            exit 1
+            ;;
+    esac
+    
+    # Финальная проверка
+    check_spark_status "$app_name"
+}
+
+# ====================================================================
+# 6. ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ
+# ====================================================================
+
+# Пример 1: Полный рестарт
+# full_spark_restart "data-platform"
+
+# Пример 2: Селективный рестарт ETL задач
+# selective_spark_restart_by_type "data-platform" "etl"
+
+# Пример 3: Рестарт только упавших приложений
+# conditional_spark_restart "data-platform"
+
+# Пример 4: Проверка статуса
+# check_spark_status "data-platform"
+
+# Пример 5: Получение логов
+# get_spark_logs "data-platform" "spark-etl-job"
+
+# ====================================================================
+# 7. ПОЛЕЗНЫЕ АЛИАСЫ И ФУНКЦИИ
+# ====================================================================
+
+# Алиасы для частых операций
+alias argo-spark-list='argocd app resources $ARGOCD_APP_NAME --kind SparkApplication'
+alias argo-spark-status='check_spark_status $ARGOCD_APP_NAME'
+alias argo-spark-restart='full_spark_restart $ARGOCD_APP_NAME'
+
+# Функция для быстрого удаления одного Spark приложения
+delete_spark_app() {
+    local app_name=${ARGOCD_APP_NAME}
+    local spark_app_name=$1
+    
+    if [ -z "$spark_app_name" ]; then
+        echo "Использование: delete_spark_app <spark_app_name>"
+        return 1
+    fi
+    
+    echo "Удаление SparkApplication: $spark_app_name"
+    argocd app delete-resource "$app_name" \
+        --kind SparkApplication \
+        --name "$spark_app_name" \
+        --force
+}
+
+# Функция для синхронизации одного Spark приложения
+sync_spark_app() {
+    local app_name=${ARGOCD_APP_NAME}
+    local spark_app_name=$1
+    
+    if [ -z "$spark_app_name" ]; then
+        echo "Использование: sync_spark_app <spark_app_name>"
+        return 1
+    fi
+    
+    echo "Синхронизация SparkApplication: $spark_app_name"
+    argocd app sync "$app_name" \
+        --resource "SparkApplication:$(argocd app get $app_name -o json | jq -r '.spec.destination.namespace'):$spark_app_name"
+}
+
+###################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Продолжу с дополнительными техниками и расширенными возможностями ArgoCD:Теперь создам файл с готовыми GitLab CI шаблонами для всех этих сценариев:
+
+###################################################
+# ====================================================================
+# ПРОДВИНУТЫЕ ТЕХНИКИ ARGOCD - HOOKS, WAVES, HEALTH CHECKS
+# ====================================================================
+
+# ====================================================================
+# 1. SYNC WAVES И ФАЗОВОЕ РАЗВЕРТЫВАНИЕ
+# ====================================================================
+
+# Аннотации для управления порядком развертывания в манифестах:
+cat << 'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-config
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"  # Развертывается первым
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"  # Развертывается вторым
+---
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-etl
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"   # Развертывается после БД
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: data-migration
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"   # Развертывается последним
+    argocd.argoproj.io/hook: PostSync   # Выполняется как post-sync hook
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+EOF
+
+# Синхронизация с учетом waves
+argocd app sync <APP_NAME> --strategy apply
+argocd app sync <APP_NAME> --async  # Не ждать завершения каждой wave
+
+# Синхронизация только определенной wave
+argocd app sync <APP_NAME> --resource-filter "metadata.annotations.argocd\.argoproj\.io/sync-wave=1"
+
+# ====================================================================
+# 2. HOOKS ДЛЯ УПРАВЛЕНИЯ ЖИЗНЕННЫМ ЦИКЛОМ
+# ====================================================================
+
+# Типы hooks и их использование:
+
+# PreSync Hook - выполняется до синхронизации
+cat << 'EOF'
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pre-sync-backup
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-weight: "-5"
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: backup
+        image: postgres:13
+        command: ["pg_dump", "..."]
+      restartPolicy: Never
+EOF
+
+# PostSync Hook - выполняется после синхронизации
+cat << 'EOF'
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: post-sync-validation
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-weight: "5"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  template:
+    spec:
+      containers:
+      - name: validator
+        image: busybox
+        command: ["sh", "-c", "curl -f http://my-service/health"]
+      restartPolicy: Never
+EOF
+
+# SyncFail Hook - выполняется при неудачной синхронизации
+cat << 'EOF'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sync-fail-notification
+  annotations:
+    argocd.argoproj.io/hook: SyncFail
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  containers:
+  - name: notify
+    image: curlimages/curl
+    command: ["curl", "-X", "POST", "https://slack.com/webhook", "-d", "Sync failed!"]
+  restartPolicy: Never
+EOF
+
+# Синхронизация только hooks
+argocd app sync <APP_NAME> --strategy hook
+
+# Пропуск hooks при синхронизации
+argocd app sync <APP_NAME> --strategy apply --skip-hooks
+
+# ====================================================================
+# 3. HEALTH CHECKS И CUSTOM HEALTH
+# ====================================================================
+
+# Просмотр health статуса
+argocd app get <APP_NAME> --show-params | grep -A10 health
+
+# Ожидание healthy статуса
+argocd app wait <APP_NAME> --health --timeout 300
+
+# Custom Health Check для SparkApplication (в ConfigMap argocd-cm):
+cat << 'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+data:
+  resource.customizations.health.sparkoperator.k8s.io_SparkApplication: |
+    hs = {}
+    if obj.status ~= nil then
+      if obj.status.applicationState ~= nil then
+        if obj.status.applicationState.state == "COMPLETED" then
+          hs.status = "Healthy"
+          hs.message = "Spark application completed successfully"
+        elseif obj.status.applicationState.state == "RUNNING" then
+          hs.status = "Progressing"
+          hs.message = "Spark application is running"
+        elseif obj.status.applicationState.state == "FAILED" then
+          hs.status = "Degraded"
+          hs.message = "Spark application failed"
+        else
+          hs.status = "Unknown"
+          hs.message = "Spark application state: " .. obj.status.applicationState.state
+        end
+      else
+        hs.status = "Progressing"
+        hs.message = "Spark application is starting"
+      end
+    else
+      hs.status = "Unknown"
+      hs.message = "No status available"
+    end
+    return hs
+EOF
+
+# ====================================================================
+# 4. RESOURCE FILTERS И INCLUSION/EXCLUSION
+# ====================================================================
+
+# Исключение ресурсов из управления ArgoCD
+cat << 'EOF'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: manual-secret
+  annotations:
+    argocd.argoproj.io/compare: ignore  # Игнорировать при сравнении
+    argocd.argoproj.io/sync: ignore     # Не синхронизировать
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: temp-config
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false  # Не удалять при prune
+EOF
+
+# Синхронизация с фильтрами
+argocd app sync <APP_NAME> --resource-filter "kind=SparkApplication"
+argocd app sync <APP_NAME> --resource-filter "metadata.namespace=production"
+argocd app sync <APP_NAME> --resource-filter "metadata.labels.app=myapp"
+
+# Исключение ресурсов при синхронизации
+argocd app sync <APP_NAME> --resource-exclude "kind=Secret"
+
+# ====================================================================
+# 5. ОПЕРАЦИИ С FINALIZERS
+# ====================================================================
+
+# Просмотр ресурсов с finalizers
+argocd app resources <APP_NAME> -o json | jq '.[] | select(.finalizers != null)'
+
+# Удаление finalizer через patch
+patch_remove_finalizer() {
+    local app_name=$1
+    local resource_kind=$2
+    local resource_name=$3
+    local namespace=$4
+    
+    echo "Удаление finalizers для $resource_kind/$resource_name"
+    
+    argocd app patch-resource "$app_name" \
+        --kind "$resource_kind" \
+        --name "$resource_name" \
+        --namespace "$namespace" \
+        --patch '{"metadata":{"finalizers":null}}' \
+        --patch-type merge
+}
+
+# Принудительное удаление "висящих" ресурсов
+force_delete_stuck_resources() {
+    local app_name=$1
+    local namespace=$(argocd app get "$app_name" -o json | jq -r '.spec.destination.namespace')
+    
+    echo "=== Поиск ресурсов в состоянии Terminating ==="
+    
+    # Находим ресурсы в состоянии Terminating
+    local terminating_pods=$(kubectl get pods -n "$namespace" --field-selector=status.phase=Terminating -o name)
+    
+    for pod in $terminating_pods; do
+        echo "Принудительное удаление $pod"
+        kubectl delete "$pod" -n "$namespace" --grace-period=0 --force
+    done
+}
+
+# ====================================================================
+# 6. BACKUP И RESTORE ОПЕРАЦИИ
+# ====================================================================
+
+# Создание backup манифестов перед операциями
+backup_manifests() {
+    local app_name=$1
+    local backup_dir="backup_$(date +%Y%m%d_%H%M%S)"
+    
+    echo "=== Создание backup манифестов ==="
+    mkdir -p "$backup_dir"
+    
+    # Backup live состояния
+    argocd app manifests "$app_name" --source live > "$backup_dir/live_manifests.yaml"
+    
+    # Backup git состояния
+    argocd app manifests "$app_name" --source git > "$backup_dir/git_manifests.yaml"
+    
+    # Backup конфигурации приложения
+    argocd app get "$app_name" -o yaml > "$backup_dir/app_config.yaml"
+    
+    echo "Backup создан в директории: $backup_dir"
+}
+
+# Restore приложения из backup
+restore_from_backup() {
+    local backup_dir=$1
+    
+    if [ ! -d "$backup_dir" ]; then
+        echo "Backup directory не найдена: $backup_dir"
+        return 1
+    fi
+    
+    echo "=== Восстановление из backup ==="
+    
+    # Восстанавливаем приложение
+    if [ -f "$backup_dir/app_config.yaml" ]; then
+        kubectl apply -f "$backup_dir/app_config.yaml"
+        echo "Конфигурация приложения восстановлена"
+    fi
+    
+    # При необходимости можно применить live манифесты
+    # kubectl apply -f "$backup_dir/live_manifests.yaml"
+}
+
+# ====================================================================
+# 7. МОНИТОРИНГ И АЛЕРТИНГ
+# ====================================================================
+
+# Функция для мониторинга состояния приложения
+monitor_app_health() {
+    local app_name=$1
+    local check_interval=${2:-30}
+    local max_checks=${3:-20}
+    local checks=0
+    
+    echo "=== Мониторинг здоровья приложения $app_name ==="
+    
+    while [ $checks -lt $max_checks ]; do
+        local health=$(argocd app get "$app_name" -o json | jq -r '.status.health.status')
+        local sync=$(argocd app get "$app_name" -o json | jq -r '.status.sync.status')
+        
+        echo "[$(date)] Health: $health, Sync: $sync"
+        
+        if [ "$health" = "Healthy" ] && [ "$sync" = "Synced" ]; then
+            echo "✓ Приложение в здоровом состоянии"
+            return 0
+        elif [ "$health" = "Degraded" ]; then
+            echo "✗ Приложение в деградированном состоянии"
+            # Можно отправить уведомление
+            return 1
+        fi
+        
+        sleep $check_interval
+        checks=$((checks + 1))
+    done
+    
+    echo "⚠ Таймаут ожидания здорового состояния"
+    return 1
+}
+
+# Проверка операций синхронизации
+check_sync_operations() {
+    local app_name=$1
+    
+    echo "=== Активные операции синхронизации ==="
+    
+    local operation=$(argocd app get "$app_name" -o json | jq '.status.operationState')
+    
+    if [ "$operation" != "null" ]; then
+        echo "Активная операция найдена:"
+        echo "$operation" | jq '{phase: .phase, message: .message, startedAt: .startedAt}'
+        
+        # Проверяем, не зависла ли операция
+        local started_at=$(echo "$operation" | jq -r '.startedAt')
+        local current_time=$(date -u +%s)
+        local started_time=$(date -d "$started_at" +%s 2>/dev/null || echo $current_time)
+        local duration=$((current_time - started_time))
+        
+        if [ $duration -gt 1800 ]; then  # 30 минут
+            echo "⚠ Операция выполняется слишком долго ($duration секунд)"
+            echo "Возможно, стоит прервать операцию:"
+            echo "argocd app terminate-op $app_name"
+        fi
+    else
+        echo "Активных операций нет"
+    fi
+}
+
+# ====================================================================
+# 8. TROUBLESHOOTING ФУНКЦИИ
+# ====================================================================
+
+# Диагностика проблем с приложением
+diagnose_app_issues() {
+    local app_name=$1
+    
+    echo "=== ДИАГНОСТИКА ПРОБЛЕМ: $app_name ==="
+    
+    # 1. Общий статус
+    echo "--- Общий статус ---"
+    argocd app get "$app_name"
+    echo
+    
+    # 2. Ресурсы в проблемном состоянии
+    echo "--- Ресурсы не в Synced состоянии ---"
+    argocd app get "$app_name" -o json | jq '.status.resources[] | select(.status != "Synced")'
+    echo
+    
+    # 3. Последние события
+    echo "--- История операций ---"
+    argocd app history "$app_name" | head -10
+    echo
+    
+    # 4. Различия между Git и Live
+    echo "--- Различия Git vs Live ---"
+    argocd app diff "$app_name" | head -50
+    echo
+    
+    # 5. Проверка в Kubernetes
+    local namespace=$(argocd app get "$app_name" -o json | jq -r '.spec.destination.namespace')
+    echo "--- События в Kubernetes (namespace: $namespace) ---"
+    kubectl get events -n "$namespace" --sort-by='.lastTimestamp' | tail -20
+}
+
+# Функция для очистки "мусора"
+cleanup_orphaned_resources() {
+    local app_name=$1
+    local namespace=$(argocd app get "$app_name" -o json | jq -r '.spec.destination.namespace')
+    
+    echo "=== Очистка потерянных ресурсов ==="
+    
+    # 1. Поиск ресурсов без owner references
+    echo "--- Поиск ресурсов без owner references ---"
+    kubectl get all -n "$namespace" -o json | jq '.items[] | select(.metadata.ownerReferences == null) | "\(.kind)/\(.metadata.name)"'
+    
+    # 2. Поиск Failed pods
+    echo "--- Удаление Failed pods ---"
+    kubectl delete pods -n "$namespace" --field-selector=status.phase=Failed
+    
+    # 3. Поиск Succeeded jobs старше суток
+    echo "--- Удаление старых Succeeded jobs ---"
+    kubectl get jobs -n "$namespace" -o json | jq -r '.items[] | select(.status.conditions[]?.type == "Complete" and .status.conditions[]?.status == "True" and (.metadata.creationTimestamp | fromdateiso8601) < (now - 86400)) | .metadata.name' | xargs -r kubectl delete job -n "$namespace"
+}
+
+# ====================================================================
+# 9. ИНТЕГРАЦИЯ С ВНЕШНИМИ СИСТЕМАМИ
+# ====================================================================
+
+# Отправка уведомлений в Slack
+send_slack_notification() {
+    local webhook_url="$SLACK_WEBHOOK_URL"
+    local app_name=$1
+    local status=$2
+    local message=$3
+    
+    if [ -z "$webhook_url" ]; then
+        echo "SLACK_WEBHOOK_URL не установлен"
+        return
+    fi
+    
+    local payload=$(cat << EOF
+{
+  "text": "ArgoCD Notification",
+  "blocks": [
+    {
+      "type": "header",
+      "text": {
+        "type": "plain_text",
+        "text": "ArgoCD Application Status"
+      }
+    },
+    {
+      "type": "section",
+      "fields": [
+        {
+          "type": "mrkdwn",
+          "text": "*Application:*\n$app_name"
+        },
+        {
+          "type": "mrkdwn",
+          "text": "*Status:*\n$status"
+        },
+        {
+          "type": "mrkdwn",
+          "text": "*Message:*\n$message"
+        },
+        {
+          "type": "mrkdwn",
+          "text": "*Time:*\n$(date)"
+        }
+      ]
+    }
+  ]
+}
+EOF
+)
+    
+    curl -X POST -H 'Content-type: application/json' \
+         --data "$payload" \
+         "$webhook_url"
+}
+
+# Интеграция с Prometheus metrics
+export_prometheus_metrics() {
+    local app_name=$1
+    local metrics_file="/tmp/argocd_metrics.prom"
+    
+    local health=$(argocd app get "$app_name" -o json | jq -r '.status.health.status')
+    local sync=$(argocd app get "$app_name" -o json | jq -r '.status.sync.status')
+    
+    # Конвертируем статусы в числовые значения
+    local health_value=0
+    case $health in
+        "Healthy") health_value=1 ;;
+        "Progressing") health_value=0.5 ;;
+        "Degraded") health_value=0 ;;
+    esac
+    
+    local sync_value=0
+    case $sync in
+        "Synced") sync_value=1 ;;
+        "OutOfSync") sync_value=0 ;;
+    esac
+    
+    cat > "$metrics_file" << EOF
+# HELP argocd_app_health_status Health status of ArgoCD application
+# TYPE argocd_app_health_status gauge
+argocd_app_health_status{app="$app_name"} $health_value
+
+# HELP argocd_app_sync_status Sync status of ArgoCD application  
+# TYPE argocd_app_sync_status gauge
+argocd_app_sync_status{app="$app_name"} $sync_value
+EOF
+    
+    echo "Metrics exported to $metrics_file"
+}
+
+# ====================================================================
+# 10. ПРИМЕРЫ КОМПЛЕКСНЫХ WORKFLOWS
+# ====================================================================
+
+# Blue-Green deployment для Spark приложений
+blue_green_spark_deployment() {
+    local app_name=$1
+    local blue_namespace="${app_name}-blue"
+    local green_namespace="${app_name}-green"
+    
+    echo "=== BLUE-GREEN DEPLOYMENT ДЛЯ SPARK ==="
+    
+    # 1. Backup текущего состояния
+    backup_manifests "$app_name"
+    
+    # 2. Создаем green environment
+    echo "Развертывание в green environment..."
+    kubectl create namespace "$green_namespace" --dry-run=client -o yaml | kubectl apply -f -
+    
+    # 3. Обновляем destination namespace в ArgoCD
+    argocd app set "$app_name" --dest-namespace "$green_namespace"
+    
+    # 4. Синхронизируем в green
+    argocd app sync "$app_name" --force
+    argocd app wait "$app_name" --health --timeout 600
+    
+    # 5. Проверяем здоровье green environment
+    if monitor_app_health "$app_name" 30 10; then
+        echo "✓ Green environment здоров, переключаем трафик"
+        
+        # 6. Переключаем трафик (обновляем ingress/service)
+        kubectl patch service main-service -p '{"spec":{"selector":{"version":"green"}}}'
+        
+        # 7. Удаляем blue environment после успешной проверки
+        echo "Удаление blue environment..."
+        kubectl delete namespace "$blue_namespace" --timeout=300s
+        
+        echo "✓ Blue-Green deployment завершен успешно"
+    else
+        echo "✗ Green environment нездоров, откатываемся"
+        
+        # Откат к blue
+        argocd app set "$app_name" --dest-namespace "$blue_namespace"
+        argocd app sync "$app_name"
+        
+        # Удаляем неудачный green
+        kubectl delete namespace "$green_namespace"
+        
+        return 1
+    fi
+}
+
+# Canary deployment с постепенным переводом трафика
+canary_deployment() {
+    local app_name=$1
+    local canary_weight_steps=(10 25 50 75 100)
+    
+    echo "=== CANARY DEPLOYMENT ==="
+    
+    for weight in "${canary_weight_steps[@]}"; do
+        echo "Устанавливаем canary weight: $weight%"
+        
+        # Обновляем вес в istio VirtualService или другом ingress controller
+        kubectl patch virtualservice "$app_name-vs" -p "{\"spec\":{\"http\":[{\"match\":[{\"headers\":{\"canary\":{\"exact\":\"true\"}}}],\"route\":[{\"destination\":{\"host\":\"$app_name-canary\"},\"weight\":$weight}]}]}}"
+        
+        # Ждем и проверяем метрики
+        echo "Ожидание $weight% трафика на canary..."
+        sleep 60
+        
+        # Проверяем error rate (здесь должна быть интеграция с monitoring)
+        local error_rate=$(curl -s "http://prometheus:9090/api/v1/query?query=rate(http_requests_total{job=\"$app_name-canary\",status=~\"5..\"}[5m])" | jq '.data.result[0].value[1] // "0"' | tr -d '"')
+        
+        if (( $(echo "$error_rate > 0.05" | bc -l) )); then
+            echo "✗ Высокий error rate ($error_rate), откатываемся"
+            kubectl patch virtualservice "$app_name-vs" -p '{"spec":{"http":[{"route":[{"destination":{"host":"'$app_name'"},"weight":100}]}]}}'
+            return 1
+        fi
+        
+        echo "✓ Error rate в норме ($error_rate), продолжаем"
+    done
+    
+    echo "✓ Canary deployment завершен успешно"
+}
+
+###################################################
+# ====================================================================
+# GITLAB CI ШАБЛОНЫ ДЛЯ ARGOCD ОПЕРАЦИЙ
+# ====================================================================
+
+stages:
+  - validate
+  - deploy
+  - test
+  - cleanup
+
+variables:
+  ARGOCD_SERVER: "argocd.company.com"
+  ARGOCD_CLI_VERSION: "v2.8.4"
+  KUBECTL_VERSION: "v1.28.0"
+  
+# ====================================================================
+# БАЗОВЫЕ ШАБЛОНЫ
+# ====================================================================
+
+.argocd_base: &argocd_base
+  image: alpine:latest
+  before_script:
+    # Установка инструментов
+    - apk add --no-cache curl jq bash bc
+    
+    # Установка ArgoCD CLI
+    - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_CLI_VERSION}/argocd-linux-amd64
+    - chmod +x /usr/local/bin/argocd
+    
+    # Установка kubectl
+    - curl -sSL -o /usr/local/bin/kubectl https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl
+    - chmod +x /usr/local/bin/kubectl
+    
+    # Логин в ArgoCD
+    - argocd login $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --insecure
+    
+    # Настройка kubectl (если нужен прямой доступ к кластеру)
+    - echo "$KUBECONFIG_CONTENT" | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+    
+    # Загрузка вспомогательных функций
+    - source ./scripts/argocd_functions.sh
+
+# ====================================================================
+# ОСНОВНЫЕ ОПЕРАЦИИ
+# ====================================================================
+
+# Валидация манифестов
+validate_manifests:
+  <<: *argocd_base
+  stage: validate
+  script:
+    - echo "=== Валидация манифестов ==="
+    - argocd app manifests $ARGOCD_APP_NAME --source git > /tmp/manifests.yaml
+    - kubectl apply --dry-run=client -f /tmp/manifests.yaml
+  only:
+    - merge_requests
+    - main
+
+# Простая синхронизация
+simple_sync:
+  <<: *argocd_base
+  stage: deploy
+  script:
+    - echo "=== Простая синхронизация ==="
+    - argocd app sync $ARGOCD_APP_NAME
+    - argocd app wait $ARGOCD_APP_NAME --timeout 300
+  only:
+    - main
+  when: manual
+
+# Форсированная синхронизация с prune
+force_sync:
+  <<: *argocd_base
+  stage: deploy
+  script:
+    - echo "=== Форсированная синхронизация ==="
+    - argocd app sync $ARGOCD_APP_NAME --force --prune --replace
+    - argocd app wait $ARGOCD_APP_NAME --timeout 600
+  only:
+    - main
+  when: manual
+
+# ====================================================================
+# СЕЛЕКТИВНЫЕ ОПЕРАЦИИ ДЛЯ SPARK
+# ====================================================================
+
+# Полный рестарт Spark приложений
+spark_full_restart:
+  <<: *argocd_base
+  stage: deploy
+  script:
+    - echo "=== Полный рестарт Spark приложений ==="
+    - |
+      # Функция полного рестарта Spark
+      full_spark_restart() {
+        local app_name=$1
+        echo "Полный рестарт Spark приложений в $app_name"
+        
+        # Backup перед операцией
+        backup_dir="backup_$(date +%Y%m%d_%H%M%S)"
+        mkdir -p $backup_dir
+        argocd app manifests $app_name --source live > $backup_dir/live_manifests.yaml
+        
+        # Получаем список SparkApplication
+        spark_apps=$(argocd app resources $app_name --kind SparkApplication -o json | jq -r '.[].name')
+        
+        if [ -z "$spark_apps" ]; then
+          echo "Нет SparkApplication для перезапуска"
+          return
+        fi
+        
+        # Удаляем все SparkApplication
+        for spark_app in $spark_apps; do
+          echo "Удаление SparkApplication: $spark_app"
+          argocd app delete-resource $app_name \
+            --kind SparkApplication \
+            --name $spark_app \
+            --force \
+            --propagation-policy Foreground
+        done
+        
+        # Ждем завершения удаления
+        echo "Ожидание завершения удаления..."
+        sleep 30
+        
+        # Hard refresh
+        argocd app get $app_name --hard-refresh
+        sleep 15
+        
+        # Синхронизация только SparkApplication
+        argocd app sync $app_name --kind SparkApplication --force
+        argocd app wait $app_name --timeout 600
+        
+        echo "Полный рестарт завершен"
+      }
+      
+      full_spark_restart $ARGOCD_APP_NAME
+  artifacts:
+    paths:
+      - backup_*/
+    expire_in: 7 days
+  only:
+    - main
+  when: manual
+
+# Селективный рестарт по типу Spark задач
+spark_selective_restart:
+  <<: *argocd_base
+  stage: deploy
+  script:
+    - echo "=== Селективный рестарт Spark ($SPARK_JOB_TYPE) ==="
+    - |
+      if [ -z "$SPARK_JOB_TYPE" ]; then
+        echo "Ошибка: переменная SPARK_JOB_TYPE не установлена"
+        echo "Доступные типы: etl, streaming, ml, batch"
+        exit 1
+      fi
+      
+      # Получаем namespace приложения
+      namespace=$(argocd app get $ARGOCD_APP_NAME -o json | jq -r '.spec.destination.namespace')
+      
+      # Находим SparkApplication с нужным типом через kubectl
+      spark_apps=$(kubectl get sparkapplication -n $namespace \
+        -l spark.job.type=$SPARK_JOB_TYPE \
+        -o json | jq -r '.items[].metadata.name')
+      
+      if [ -z "$spark_apps" ]; then
+        echo "Не найдено SparkApplication с типом: $SPARK_JOB_TYPE"
+        exit 0
+      fi
+      
+      echo "Найдены SparkApplication для рестарта: $spark_apps"
+      
+      # Удаляем найденные приложения
+      for spark_app in $spark_apps; do
+        echo "Удаление SparkApplication: $spark_app"
+        argocd app delete-resource $ARGOCD_APP_NAME \
+          --kind SparkApplication \
+          --name $spark_app \
+          --force
+      done
+      
+      # Refresh и sync
+      argocd app get $ARGOCD_APP_NAME --har
+
+###################################################
+
+
+###################################################
+
+
+###################################################
+
+
