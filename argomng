@@ -1,0 +1,475 @@
+Для управления ArgoCD из GitLab CI pipeline вам понадобится использовать ArgoCD CLI. Вот пример реализации:Также создам альтернативный вариант с более мягким подходом без полного удаления приложения:Теперь добавлю секцию с настройкой переменных окружения:Также добавлю в конец еще один вариант с использованием kubectl для более прямого управления:Вот несколько вариантов для управления ArgoCD из GitLab CI pipeline:
+
+**Основные подходы:**
+
+1. **Полное удаление и пересоздание** - самый радикальный способ, гарантирует чистое состояние
+2. **Мягкий рестарт** - удаляет только ресурсы, сохраняя определение приложения
+3. **Комбинированный подход** - использует kubectl для прямого удаления ресурсов + ArgoCD для синхронизации
+
+**Ключевые команды:**
+- `argocd app delete --cascade` - удаляет приложение со всеми ресурсами
+- `argocd app get --hard-refresh` - принудительно обновляет статус из Git
+- `argocd app sync --force --prune --replace` - принудительная синхронизация с заменой и удалением лишних ресурсов
+
+**Настройка переменных в GitLab:**
+В Settings > CI/CD > Variables добавьте:
+- `ARGOCD_USERNAME` и `ARGOCD_PASSWORD` (или `ARGOCD_TOKEN`)
+- `KUBECONFIG` (для прямого доступа к кластеру в варианте 3)
+
+**Рекомендации:**
+- Используйте `when: manual` для контролируемого запуска
+- Настройте правильные таймауты для вашего приложения
+- Адаптируйте селекторы labels под ваше приложение
+- Для production окружений рекомендую второй вариант как более безопасный
+
+Какой вариант больше подходит для ваших задач?
+
+
+#################################################
+# .gitlab-ci.yml
+stages:
+  - deploy
+
+variables:
+  ARGOCD_SERVER: "your-argocd-server.com"
+  ARGOCD_APP_NAME: "your-app-name"
+  ARGOCD_CLI_VERSION: "v2.8.4"
+
+argocd_redeploy:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    # Установка ArgoCD CLI
+    - apk add --no-cache curl
+    - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_CLI_VERSION}/argocd-linux-amd64
+    - chmod +x /usr/local/bin/argocd
+    
+    # Логин в ArgoCD (используя токен или логин/пароль)
+    - argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+    # Альтернативно через токен:
+    # - argocd login $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --insecure
+  
+  script:
+    # 1. Удаление всех ресурсов приложения
+    - echo "Deleting all application resources..."
+    - argocd app delete $ARGOCD_APP_NAME --cascade --yes || true
+    
+    # Ждем завершения удаления
+    - sleep 30
+    
+    # 2. Пересоздание приложения (если оно было удалено полностью)
+    - echo "Recreating application if needed..."
+    - |
+      argocd app get $ARGOCD_APP_NAME > /dev/null 2>&1 || \
+      argocd app create $ARGOCD_APP_NAME \
+        --repo $CI_PROJECT_URL \
+        --path ./k8s \
+        --dest-server https://kubernetes.default.svc \
+        --dest-namespace default \
+        --sync-policy automated \
+        --auto-prune \
+        --self-heal
+    
+    # 3. Hard refresh репозитория
+    - echo "Refreshing repository..."
+    - argocd app get $ARGOCD_APP_NAME --hard-refresh
+    
+    # Ждем обновления статуса
+    - sleep 10
+    
+    # 4. Проверяем статус OutOfSync
+    - echo "Checking sync status..."
+    - argocd app get $ARGOCD_APP_NAME
+    
+    # 5. Принудительная синхронизация
+    - echo "Forcing sync..."
+    - argocd app sync $ARGOCD_APP_NAME --force --prune --replace
+    
+    # 6. Ждем завершения синхронизации
+    - echo "Waiting for sync completion..."
+    - argocd app wait $ARGOCD_APP_NAME --timeout 600
+    
+    # 7. Проверяем финальный статус
+    - echo "Final status check..."
+    - argocd app get $ARGOCD_APP_NAME
+
+  only:
+    - main
+    - develop
+  when: manual
+#################################################
+# .gitlab-ci.yml
+stages:
+  - deploy
+
+variables:
+  ARGOCD_SERVER: "your-argocd-server.com"
+  ARGOCD_APP_NAME: "your-app-name"
+  ARGOCD_CLI_VERSION: "v2.8.4"
+
+# Вариант 1: Полное удаление и пересоздание
+argocd_full_redeploy:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    # Установка ArgoCD CLI
+    - apk add --no-cache curl
+    - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_CLI_VERSION}/argocd-linux-amd64
+    - chmod +x /usr/local/bin/argocd
+    
+    # Логин в ArgoCD (используя токен или логин/пароль)
+    - argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+    # Альтернативно через токен:
+    # - argocd login $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --insecure
+  
+  script:
+    # 1. Удаление всех ресурсов приложения
+    - echo "Deleting all application resources..."
+    - argocd app delete $ARGOCD_APP_NAME --cascade --yes || true
+    
+    # Ждем завершения удаления
+    - sleep 30
+    
+    # 2. Пересоздание приложения
+    - echo "Recreating application..."
+    - |
+      argocd app create $ARGOCD_APP_NAME \
+        --repo $CI_PROJECT_URL \
+        --path ./k8s \
+        --dest-server https://kubernetes.default.svc \
+        --dest-namespace default \
+        --sync-policy automated \
+        --auto-prune \
+        --self-heal
+    
+    # 3. Синхронизация
+    - echo "Syncing application..."
+    - argocd app sync $ARGOCD_APP_NAME --force
+    
+    # 4. Ждем завершения
+    - argocd app wait $ARGOCD_APP_NAME --timeout 600
+    
+    # 5. Финальная проверка
+    - argocd app get $ARGOCD_APP_NAME
+
+  only:
+    - main
+    - develop
+  when: manual
+
+# Вариант 2: Мягкий рестарт без удаления приложения
+argocd_soft_restart:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    # Установка ArgoCD CLI
+    - apk add --no-cache curl
+    - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_CLI_VERSION}/argocd-linux-amd64
+    - chmod +x /usr/local/bin/argocd
+    
+    # Логин в ArgoCD
+    - argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+  
+  script:
+    # 1. Удаляем только ресурсы, но оставляем приложение
+    - echo "Deleting application resources (keeping app definition)..."
+    - argocd app patch-resource $ARGOCD_APP_NAME --kind Deployment --patch '{"spec":{"replicas":0}}' --patch-type merge || true
+    - argocd app patch-resource $ARGOCD_APP_NAME --kind StatefulSet --patch '{"spec":{"replicas":0}}' --patch-type merge || true
+    
+    # 2. Hard refresh репозитория
+    - echo "Hard refreshing repository..."
+    - argocd app get $ARGOCD_APP_NAME --hard-refresh
+    
+    # Ждем обновления статуса
+    - sleep 15
+    
+    # 3. Проверяем статус
+    - echo "Current sync status:"
+    - argocd app get $ARGOCD_APP_NAME
+    
+    # 4. Принудительная синхронизация с заменой и прунингом
+    - echo "Force syncing with replace and prune..."
+    - argocd app sync $ARGOCD_APP_NAME --force --prune --replace
+    
+    # 5. Ждем завершения синхронизации
+    - echo "Waiting for sync completion..."
+    - argocd app wait $ARGOCD_APP_NAME --timeout 600
+    
+    # 6. Финальная проверка
+    - echo "Final status:"
+    - argocd app get $ARGOCD_APP_NAME
+
+  only:
+    - main
+    - develop
+  when: manual
+#################################################
+# .gitlab-ci.yml
+stages:
+  - deploy
+
+variables:
+  ARGOCD_SERVER: "your-argocd-server.com"
+  ARGOCD_APP_NAME: "your-app-name"
+  ARGOCD_CLI_VERSION: "v2.8.4"
+
+# Настройка переменных в Settings > CI/CD > Variables:
+# ARGOCD_USERNAME - имя пользователя ArgoCD (или используйте токен)
+# ARGOCD_PASSWORD - пароль пользователя ArgoCD (или используйте токен)
+# ARGOCD_TOKEN - токен для доступа к ArgoCD (альтернатива username/password)
+
+# Вариант 1: Полное удаление и пересоздание
+argocd_full_redeploy:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    # Установка ArgoCD CLI
+    - apk add --no-cache curl
+    - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_CLI_VERSION}/argocd-linux-amd64
+    - chmod +x /usr/local/bin/argocd
+    
+    # Логин в ArgoCD (используя токен или логин/пароль)
+    - argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+    # Альтернативно через токен:
+    # - argocd login $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --insecure
+  
+  script:
+    # 1. Удаление всех ресурсов приложения
+    - echo "Deleting all application resources..."
+    - argocd app delete $ARGOCD_APP_NAME --cascade --yes || true
+    
+    # Ждем завершения удаления
+    - sleep 30
+    
+    # 2. Пересоздание приложения
+    - echo "Recreating application..."
+    - |
+      argocd app create $ARGOCD_APP_NAME \
+        --repo $CI_PROJECT_URL \
+        --path ./k8s \
+        --dest-server https://kubernetes.default.svc \
+        --dest-namespace default \
+        --sync-policy automated \
+        --auto-prune \
+        --self-heal
+    
+    # 3. Синхронизация
+    - echo "Syncing application..."
+    - argocd app sync $ARGOCD_APP_NAME --force
+    
+    # 4. Ждем завершения
+    - argocd app wait $ARGOCD_APP_NAME --timeout 600
+    
+    # 5. Финальная проверка
+    - argocd app get $ARGOCD_APP_NAME
+
+  only:
+    - main
+    - develop
+  when: manual
+
+# Вариант 2: Мягкий рестарт без удаления приложения
+argocd_soft_restart:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    # Установка ArgoCD CLI
+    - apk add --no-cache curl
+    - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_CLI_VERSION}/argocd-linux-amd64
+    - chmod +x /usr/local/bin/argocd
+    
+    # Логин в ArgoCD
+    - argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+  
+  script:
+    # 1. Удаляем только ресурсы, но оставляем приложение
+    - echo "Deleting application resources (keeping app definition)..."
+    - argocd app patch-resource $ARGOCD_APP_NAME --kind Deployment --patch '{"spec":{"replicas":0}}' --patch-type merge || true
+    - argocd app patch-resource $ARGOCD_APP_NAME --kind StatefulSet --patch '{"spec":{"replicas":0}}' --patch-type merge || true
+    
+    # 2. Hard refresh репозитория
+    - echo "Hard refreshing repository..."
+    - argocd app get $ARGOCD_APP_NAME --hard-refresh
+    
+    # Ждем обновления статуса
+    - sleep 15
+    
+    # 3. Проверяем статус
+    - echo "Current sync status:"
+    - argocd app get $ARGOCD_APP_NAME
+    
+    # 4. Принудительная синхронизация с заменой и прунингом
+    - echo "Force syncing with replace and prune..."
+    - argocd app sync $ARGOCD_APP_NAME --force --prune --replace
+    
+    # 5. Ждем завершения синхронизации
+    - echo "Waiting for sync completion..."
+    - argocd app wait $ARGOCD_APP_NAME --timeout 600
+    
+    # 6. Финальная проверка
+    - echo "Final status:"
+    - argocd app get $ARGOCD_APP_NAME
+
+  only:
+    - main
+    - develop
+  when: manual
+#################################################
+# .gitlab-ci.yml
+stages:
+  - deploy
+
+variables:
+  ARGOCD_SERVER: "your-argocd-server.com"
+  ARGOCD_APP_NAME: "your-app-name"
+  ARGOCD_CLI_VERSION: "v2.8.4"
+
+# Настройка переменных в Settings > CI/CD > Variables:
+# ARGOCD_USERNAME - имя пользователя ArgoCD (или используйте токен)
+# ARGOCD_PASSWORD - пароль пользователя ArgoCD (или используйте токен)
+# ARGOCD_TOKEN - токен для доступа к ArgoCD (альтернатива username/password)
+
+# Вариант 1: Полное удаление и пересоздание
+argocd_full_redeploy:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    # Установка ArgoCD CLI
+    - apk add --no-cache curl
+    - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_CLI_VERSION}/argocd-linux-amd64
+    - chmod +x /usr/local/bin/argocd
+    
+    # Логин в ArgoCD (используя токен или логин/пароль)
+    - argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+    # Альтернативно через токен:
+    # - argocd login $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --insecure
+  
+  script:
+    # 1. Удаление всех ресурсов приложения
+    - echo "Deleting all application resources..."
+    - argocd app delete $ARGOCD_APP_NAME --cascade --yes || true
+    
+    # Ждем завершения удаления
+    - sleep 30
+    
+    # 2. Пересоздание приложения
+    - echo "Recreating application..."
+    - |
+      argocd app create $ARGOCD_APP_NAME \
+        --repo $CI_PROJECT_URL \
+        --path ./k8s \
+        --dest-server https://kubernetes.default.svc \
+        --dest-namespace default \
+        --sync-policy automated \
+        --auto-prune \
+        --self-heal
+    
+    # 3. Синхронизация
+    - echo "Syncing application..."
+    - argocd app sync $ARGOCD_APP_NAME --force
+    
+    # 4. Ждем завершения
+    - argocd app wait $ARGOCD_APP_NAME --timeout 600
+    
+    # 5. Финальная проверка
+    - argocd app get $ARGOCD_APP_NAME
+
+  only:
+    - main
+    - develop
+  when: manual
+
+# Вариант 3: Прямое управление через kubectl + ArgoCD API
+argocd_kubectl_restart:
+  stage: deploy
+  image: alpine/k8s:latest
+  before_script:
+    # Установка ArgoCD CLI
+    - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_CLI_VERSION}/argocd-linux-amd64
+    - chmod +x /usr/local/bin/argocd
+    
+    # Настройка kubectl (предполагается, что KUBECONFIG настроен в переменных)
+    - kubectl config current-context
+    
+    # Логин в ArgoCD
+    - argocd login $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --insecure
+  
+  script:
+    # 1. Удаляем все ресурсы через kubectl напрямую
+    - echo "Deleting resources via kubectl..."
+    - kubectl delete all -l app.kubernetes.io/instance=$ARGOCD_APP_NAME --timeout=60s || true
+    - kubectl delete pvc -l app.kubernetes.io/instance=$ARGOCD_APP_NAME --timeout=60s || true
+    - kubectl delete secrets -l app.kubernetes.io/instance=$ARGOCD_APP_NAME --timeout=60s || true
+    - kubectl delete configmaps -l app.kubernetes.io/instance=$ARGOCD_APP_NAME --timeout=60s || true
+    
+    # 2. Refresh приложения в ArgoCD
+    - echo "Refreshing ArgoCD application..."
+    - argocd app get $ARGOCD_APP_NAME --hard-refresh
+    
+    # Ждем обновления статуса
+    - sleep 20
+    
+    # 3. Sync приложения
+    - echo "Syncing application..."
+    - argocd app sync $ARGOCD_APP_NAME --force --prune
+    
+    # 4. Ждем завершения
+    - argocd app wait $ARGOCD_APP_NAME --timeout 600
+    
+    # 5. Проверяем результат
+    - echo "Deployment status:"
+    - kubectl get pods -l app.kubernetes.io/instance=$ARGOCD_APP_NAME
+    - argocd app get $ARGOCD_APP_NAME
+
+  only:
+    - main
+    - develop
+  when: manual
+
+# Вариант 2: Мягкий рестарт без удаления приложения
+argocd_soft_restart:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    # Установка ArgoCD CLI
+    - apk add --no-cache curl
+    - curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_CLI_VERSION}/argocd-linux-amd64
+    - chmod +x /usr/local/bin/argocd
+    
+    # Логин в ArgoCD
+    - argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+  
+  script:
+    # 1. Удаляем только ресурсы, но оставляем приложение
+    - echo "Deleting application resources (keeping app definition)..."
+    - argocd app patch-resource $ARGOCD_APP_NAME --kind Deployment --patch '{"spec":{"replicas":0}}' --patch-type merge || true
+    - argocd app patch-resource $ARGOCD_APP_NAME --kind StatefulSet --patch '{"spec":{"replicas":0}}' --patch-type merge || true
+    
+    # 2. Hard refresh репозитория
+    - echo "Hard refreshing repository..."
+    - argocd app get $ARGOCD_APP_NAME --hard-refresh
+    
+    # Ждем обновления статуса
+    - sleep 15
+    
+    # 3. Проверяем статус
+    - echo "Current sync status:"
+    - argocd app get $ARGOCD_APP_NAME
+    
+    # 4. Принудительная синхронизация с заменой и прунингом
+    - echo "Force syncing with replace and prune..."
+    - argocd app sync $ARGOCD_APP_NAME --force --prune --replace
+    
+    # 5. Ждем завершения синхронизации
+    - echo "Waiting for sync completion..."
+    - argocd app wait $ARGOCD_APP_NAME --timeout 600
+    
+    # 6. Финальная проверка
+    - echo "Final status:"
+    - argocd app get $ARGOCD_APP_NAME
+
+  only:
+    - main
+    - develop
+  when: manual
+#################################################
