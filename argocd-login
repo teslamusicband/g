@@ -1,0 +1,149 @@
+Для подключения к ArgoCD из GitLab Runner в другом namespace вам нужно настроить несколько компонентов:
+
+## 1. Создание ServiceAccount и RBAC
+
+Создайте ServiceAccount в namespace где запущен GitLab Runner:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-client
+  namespace: gitlab-runner-namespace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-client
+rules:
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-client
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-client
+subjects:
+- kind: ServiceAccount
+  name: argocd-client
+  namespace: gitlab-runner-namespace
+```
+
+## 2. Настройка доступа к ArgoCD API
+
+В ArgoCD namespace создайте или обновите ConfigMap для разрешения доступа:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cmd-params-cm
+  namespace: argocd-namespace
+data:
+  server.insecure: "true"  # если используете HTTP
+```
+
+## 3. Создание пользователя в ArgoCD
+
+Обновите ConfigMap `argocd-cm` в ArgoCD namespace:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd-namespace
+data:
+  accounts.ci: login
+  accounts.ci.enabled: "true"
+```
+
+Создайте Secret с паролем:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argocd-secret
+  namespace: argocd-namespace
+type: Opaque
+stringData:
+  accounts.ci.password: "$2a$10$rRyBsGSHK6.uc8fntPwVIuLVHgsAhAX7TcdrqW/RADU0uh7CaChLa"  # bcrypt hash от "password123"
+```
+
+## 4. Настройка GitLab CI/CD переменных
+
+В настройках проекта GitLab добавьте переменные:
+- `ARGOCD_SERVER`: URL вашего ArgoCD (например, `argocd-server.argocd-namespace.svc.cluster.local`)
+- `ARGOCD_USERNAME`: `ci`
+- `ARGOCD_PASSWORD`: ваш пароль
+
+## 5. Пример GitLab CI pipeline
+
+```yaml
+deploy:
+  stage: deploy
+  image: argoproj/argocd:latest
+  script:
+    # Установка kubectl если нужен
+    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    - chmod +x kubectl && mv kubectl /usr/local/bin/
+    
+    # Определение URL ArgoCD сервера
+    - ARGOCD_SERVER_URL="argocd-server.argocd-namespace.svc.cluster.local"
+    
+    # Логин в ArgoCD
+    - argocd login $ARGOCD_SERVER_URL --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+    
+    # Ваши команды ArgoCD
+    - argocd app list
+    - argocd app sync your-app-name
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+```
+
+## 6. Альтернативный способ с токеном
+
+Создайте токен для пользователя:
+
+```bash
+# Подключитесь к ArgoCD pod
+kubectl exec -it argocd-server-xxx -n argocd-namespace -- bash
+
+# Сгенерируйте токен
+argocd account generate-token --account ci --id ci-token
+```
+
+Используйте токен в CI:
+
+```yaml
+script:
+  - argocd login $ARGOCD_SERVER_URL --auth-token $ARGOCD_TOKEN --insecure
+```
+
+## 7. Проверка подключения
+
+Для отладки можете проверить доступность сервера:
+
+```bash
+# В pipeline
+- nslookup argocd-server.argocd-namespace.svc.cluster.local
+- curl -k https://argocd-server.argocd-namespace.svc.cluster.local/healthz
+```
+
+## Важные замечания:
+
+1. **Безопасность**: Используйте Kubernetes Secrets для хранения паролей и токенов
+2. **Network Policies**: Убедитесь, что нет сетевых политик, блокирующих трафик между namespace
+3. **TLS**: В production используйте HTTPS и соответствующие сертификаты
+4. **RBAC**: Настройте минимальные необходимые права для ServiceAccount
+
+Этот подход позволит вашему GitLab Runner подключаться к ArgoCD и выполнять необходимые операции через ArgoCD CLI.
