@@ -1,0 +1,164 @@
+Для корпоративного конвейера обработки данных с вашим железом рекомендую следующую конфигурацию дискового пространства:
+
+## HAProxy серверы (2 шт)
+**Конфигурация**: RAID 1 на SSD
+- 2x SSD в RAID 1 для ОС и конфигураций
+- HDD можно не использовать или настроить для логов
+- **Обоснование**: Высокая доступность критичнее производительности
+
+## ClickHouse серверы (3 шт)
+**Конфигурация**: Гибридная RAID + ZFS
+- **Система**: RAID 1 на 2 SSD (ОС + система)
+- **Данные**: ZFS raidz2 на 8-10 HDD (основные данные)
+- **WAL/временные файлы**: Оставшиеся HDD в RAID 10 или отдельные диски
+- **Кэш**: ZFS L2ARC на свободных SSD
+
+**ZFS настройки**:
+```bash
+# Пул для данных
+zpool create -o ashift=12 clickhouse_data raidz2 /dev/sd[c-l]
+zfs set compression=lz4 clickhouse_data
+zfs set recordsize=64k clickhouse_data
+zfs set primarycache=metadata clickhouse_data
+```
+
+## VictoriaMetrics/ELK серверы (3 шт)
+**Конфигурация**: ZFS с приоритетом на производительность
+- **Система**: RAID 1 на SSD
+- **Данные**: ZFS raidz1 на 6-8 HDD (индексы и метрики)
+- **Горячие данные**: ZFS striped на оставшихся HDD + SSD кэш
+- **WAL/временные**: Отдельные диски или RAID 0
+
+## Kafka серверы (3 шт)
+**Конфигурация**: Производительность + надежность
+- **Система**: RAID 1 на SSD
+- **Kafka logs**: RAID 10 на 8 HDD (высокие IOPS для записи)
+- **ZooKeeper данные**: Отдельные диски или SSD
+- **Репликация**: Kafka RF=3 компенсирует RAID 10
+
+## Patroni+PostgreSQL серверы (3 шт)
+**Конфигурация**: Максимальная надежность
+- **Система**: RAID 1 на SSD
+- **WAL**: Отдельные SSD или быстрые HDD в RAID 1
+- **Данные**: RAID 10 на 8 HDD
+- **Backup**: ZFS raidz2 на оставшихся дисках
+
+```sql
+-- PostgreSQL настройки для RAID 10
+wal_level = replica
+max_wal_size = 16GB
+checkpoint_completion_target = 0.9
+```
+
+## Talos K8s кластер (10 нод)
+**Конфигурация**: Контейнерная оптимизация
+- **Система**: RAID 1 на SSD (etcd + система)
+- **Container runtime**: ZFS или отдельные SSD
+- **Persistent volumes**: ZFS raidz1/raidz2 на HDD пулах
+- **Local storage**: Отдельные диски для StatefulSets
+
+```yaml
+# Talos machine config snippet
+machine:
+  disks:
+    - device: /dev/md0  # RAID1 SSD
+      partitions:
+        - mountpoint: /var/lib/containerd
+    - device: /dev/zpool/k8s-storage
+      partitions:
+        - mountpoint: /var/lib/kubelet
+```
+
+## Общие рекомендации
+
+**Файловые системы**:
+- ClickHouse: XFS с noatime
+- PostgreSQL: XFS или ext4
+- Kafka: XFS с noatime
+- ZFS pools: встроенная файловая система
+
+**Мониторинг дисков**:
+```bash
+# SMART мониторинг
+smartctl -a /dev/sdX
+# ZFS health
+zpool status
+# RAID статус
+cat /proc/mdstat
+```
+
+**Бэкапы**:
+- ZFS snapshots для быстрых снимков
+- Регулярные реплики на удаленные системы
+- PostgreSQL pg_basebackup + WAL архивы
+
+**Производительность**:
+- Отключить swap на всех нодах
+- Настроить elevator=noop для SSD
+- vm.swappiness=1 для систем с большим RAM
+- Отдельные диски для логов системы
+
+Эта конфигурация обеспечит высокую доступность, производительность и масштабируемость для корпоративного data pipeline при эффективном использовании железа Huawei.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+| Сервер | Тип хранилища | RAID уровень | ZFS | Назначение | Диски |
+|--------|---------------|--------------|-----|-------------|--------|
+| **HAProxy (2 шт)** | RAID | RAID 1 | Нет | ОС + конфигурации | 2x SSD |
+| | JBOD | - | Нет | Логи (опционально) | HDD |
+| **ClickHouse (3 шт)** | RAID | RAID 1 | Нет | ОС + система | 2x SSD |
+| | ZFS | raidz2 | Да | Основные данные | 8-10x HDD |
+| | RAID | RAID 10 | Нет | WAL/временные файлы | Оставшиеся HDD |
+| | ZFS L2ARC | - | Да | Кэш | Свободные SSD |
+| **VictoriaMetrics/ELK (3 шт)** | RAID | RAID 1 | Нет | ОС + система | 2x SSD |
+| | ZFS | raidz1 | Да | Индексы и метрики | 6-8x HDD |
+| | ZFS | stripe | Да | Горячие данные | Оставшиеся HDD |
+| | ZFS L2ARC | - | Да | Кэш | SSD |
+| | JBOD | - | Нет | WAL/временные | Отдельные диски |
+| **Kafka (3 шт)** | RAID | RAID 1 | Нет | ОС + система | 2x SSD |
+| | RAID | RAID 10 | Нет | Kafka logs | 8x HDD |
+| | JBOD | - | Нет | ZooKeeper данные | Отдельные диски |
+| **Patroni+PostgreSQL (3 шт)** | RAID | RAID 1 | Нет | ОС + система | 2x SSD |
+| | RAID | RAID 1 | Нет | PostgreSQL WAL | Отдельные SSD/HDD |
+| | RAID | RAID 10 | Нет | Данные PostgreSQL | 8x HDD |
+| | ZFS | raidz2 | Да | Backup | Оставшиеся диски |
+| **Talos K8s мастеры (3 шт)** | RAID | RAID 1 | Нет | ОС + etcd | 2x SSD |
+| | ZFS | raidz1 | Да | Container runtime | HDD пул |
+| | ZFS | raidz2 | Да | Persistent volumes | HDD пул |
+| **Talos K8s воркеры (7 шт)** | RAID | RAID 1 | Нет | ОС + система | 2x SSD |
+| | ZFS | raidz1 | Да | Local storage | 6-8x HDD |
+| | JBOD | - | Нет | StatefulSets | Отдельные диски |
+| | ZFS | stripe | Да | Container images | Быстрый пул HDD |
+
+## Сводка по технологиям
+
+**RAID уровни используемые:**
+- RAID 1: Критичные системные диски (ОС, etcd, PostgreSQL WAL)
+- RAID 10: Высокопроизводительные данные (Kafka logs, PostgreSQL data)
+- RAID 0: Временные/кэш данные (где допустима потеря)
+
+**ZFS конфигурации:**
+- raidz1: Базовая защита (1 диск отказа) для метрик, логов
+- raidz2: Повышенная защита (2 диска отказа) для критичных данных
+- stripe: Максимальная производительность для временных данных
+- L2ARC: SSD кэширование для ZFS пулов
+
+**JBOD использование:**
+- Некритичные данные (логи HAProxy, временные файлы)
+- Отдельные диски для специфичных задач (ZooKeeper, StatefulSets)
+- Гибкое распределение нагрузки
+
+Эта конфигурация обеспечивает оптимальный баланс производительности, надежности и гибкости для каждого типа сервиса в вашем data pipeline.
