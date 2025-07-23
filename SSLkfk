@@ -1,0 +1,69 @@
+Да, вы правы! Для MM2 нужно явно указать протокол для каждого кластера, включая PLAINTEXT. Вот исправленная конфигурация:
+
+**mm2.properties с mixed security (source SSL + target PLAINTEXT):**
+
+```properties
+# Clusters definition
+clusters = source, target
+
+# Source cluster config (SSL + SCRAM)
+source.bootstrap.servers = remote-kafka:9093
+source.security.protocol = SASL_SSL
+source.sasl.mechanism = SCRAM-SHA-512
+source.sasl.jaas.config = org.apache.kafka.common.security.scram.ScramLoginModule required \
+    username="your-source-username" \
+    password="your-source-password";
+
+source.ssl.truststore.location = /path/to/source-truststore.jks
+source.ssl.truststore.password = source-truststore-password
+source.ssl.keystore.location = /path/to/source-keystore.jks
+source.ssl.keystore.password = source-keystore-password
+source.ssl.key.password = source-key-password
+
+# Target cluster config (PLAINTEXT)
+target.bootstrap.servers = localhost:9092
+target.security.protocol = PLAINTEXT
+
+# Topics to replicate
+source->target.topics = your-topic.*
+
+# Replication settings
+tasks.max = 12
+replication.factor = 1
+
+# Producer overrides для target (PLAINTEXT + принудительное распределение)
+target.producer.override.security.protocol = PLAINTEXT
+target.producer.override.partitioner.class = org.apache.kafka.clients.producer.RoundRobinPartitioner
+target.producer.override.acks = 1
+
+# Consumer overrides для source (SSL + SCRAM)
+source.consumer.override.security.protocol = SASL_SSL
+source.consumer.override.sasl.mechanism = SCRAM-SHA-512
+source.consumer.override.sasl.jaas.config = org.apache.kafka.common.security.scram.ScramLoginModule required \
+    username="your-source-username" \
+    password="your-source-password";
+
+source.consumer.override.ssl.truststore.location = /path/to/source-truststore.jks
+source.consumer.override.ssl.truststore.password = source-truststore-password
+
+# Internal topics settings (для target кластера где создаются служебные топики)
+offset-syncs.topic.replication.factor = 1
+heartbeats.topic.replication.factor = 1
+checkpoints.topic.replication.factor = 1
+```
+
+**Ключевые моменты:**
+
+1. **Обязательно указывать `security.protocol`** для каждого кластера
+2. **Target кластер**: `target.security.protocol = PLAINTEXT`
+3. **Source кластер**: `source.security.protocol = SASL_SSL`
+4. **Producer overrides** должны соответствовать target кластеру
+5. **Consumer overrides** должны соответствовать source кластеру
+
+Проблема была в том, что MM2 пытался использовать SSL настройки для target кластера (где создаются внутренние топики вроде `mm2-offsets.target.internal`), но target кластер работает в PLAINTEXT режиме.
+
+**Проверьте также порты:**
+- Source: `9093` (SSL порт)
+- Target: `9092` (PLAINTEXT порт)
+
+После этих изменений внутренние топики MM2 должны создаваться корректно в target кластере.
