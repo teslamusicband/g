@@ -1,0 +1,131 @@
+Для обычного Kafka MirrorMaker 2 (не через Connect) SSL и SCRAM-SHA-512 настройки добавляются в файл конфигурации `mm2.properties`:
+
+**Базовая структура mm2.properties:**
+
+```properties
+# Clusters definition
+clusters = source, target
+
+# Source cluster config
+source.bootstrap.servers = remote-kafka:9093
+target.bootstrap.servers = localhost:9093
+
+# Topics to replicate
+source->target.topics = your-topic.*
+
+# Replication settings
+tasks.max = 12
+replication.factor = 1
+
+# ========== SOURCE CLUSTER SSL/SCRAM CONFIG ==========
+source.security.protocol = SASL_SSL
+source.sasl.mechanism = SCRAM-SHA-512
+source.sasl.jaas.config = org.apache.kafka.common.security.scram.ScramLoginModule required \
+    username="your-source-username" \
+    password="your-source-password";
+
+# Source SSL settings
+source.ssl.truststore.location = /path/to/source-truststore.jks
+source.ssl.truststore.password = source-truststore-password
+source.ssl.keystore.location = /path/to/source-keystore.jks
+source.ssl.keystore.password = source-keystore-password
+source.ssl.key.password = source-key-password
+
+# Optional SSL settings for source
+source.ssl.endpoint.identification.algorithm = 
+source.ssl.truststore.type = JKS
+source.ssl.keystore.type = JKS
+
+# ========== TARGET CLUSTER SSL/SCRAM CONFIG ==========
+target.security.protocol = SASL_SSL
+target.sasl.mechanism = SCRAM-SHA-512
+target.sasl.jaas.config = org.apache.kafka.common.security.scram.ScramLoginModule required \
+    username="your-target-username" \
+    password="your-target-password";
+
+# Target SSL settings
+target.ssl.truststore.location = /path/to/target-truststore.jks
+target.ssl.truststore.password = target-truststore-password
+target.ssl.keystore.location = /path/to/target-keystore.jks  
+target.ssl.keystore.password = target-keystore-password
+target.ssl.key.password = target-key-password
+
+target.ssl.endpoint.identification.algorithm = 
+target.ssl.truststore.type = JKS
+target.ssl.keystore.type = JKS
+
+# ========== PRODUCER OVERRIDES (для принудительного распределения) ==========
+target.producer.override.partitioner.class = org.apache.kafka.clients.producer.RoundRobinPartitioner
+target.producer.override.acks = 1
+target.producer.override.security.protocol = SASL_SSL
+target.producer.override.sasl.mechanism = SCRAM-SHA-512
+target.producer.override.sasl.jaas.config = org.apache.kafka.common.security.scram.ScramLoginModule required \
+    username="your-target-username" \
+    password="your-target-password";
+
+# ========== CONSUMER OVERRIDES ==========
+source.consumer.override.security.protocol = SASL_SSL
+source.consumer.override.sasl.mechanism = SCRAM-SHA-512
+source.consumer.override.sasl.jaas.config = org.apache.kafka.common.security.scram.ScramLoginModule required \
+    username="your-source-username" \
+    password="your-source-password";
+```
+
+**Если используете только SSL без SCRAM:**
+
+```properties
+# Source cluster - только SSL
+source.security.protocol = SSL
+source.ssl.truststore.location = /path/to/truststore.jks
+source.ssl.truststore.password = truststore-password
+source.ssl.keystore.location = /path/to/keystore.jks
+source.ssl.keystore.password = keystore-password
+source.ssl.key.password = key-password
+
+# Target cluster - только SSL  
+target.security.protocol = SSL
+target.ssl.truststore.location = /path/to/truststore.jks
+target.ssl.truststore.password = truststore-password
+target.ssl.keystore.location = /path/to/keystore.jks
+target.ssl.keystore.password = keystore-password
+target.ssl.key.password = key-password
+```
+
+**Запуск MM2:**
+
+```bash
+kafka-mirror-maker.sh --consumer.config mm2.properties --producer.config mm2.properties --whitelist "your-topic.*"
+
+# Или для новых версий Kafka:
+kafka-mirror-maker-2.sh mm2.properties
+```
+
+**Альтернативно - отдельные файлы для consumer и producer:**
+
+**consumer.properties:**
+```properties
+bootstrap.servers = remote-kafka:9093
+security.protocol = SASL_SSL
+sasl.mechanism = SCRAM-SHA-512
+sasl.jaas.config = org.apache.kafka.common.security.scram.ScramLoginModule required username="user" password="pass";
+ssl.truststore.location = /path/to/truststore.jks
+ssl.truststore.password = truststore-pass
+group.id = mm2-consumer-group
+```
+
+**producer.properties:**
+```properties
+bootstrap.servers = localhost:9093
+security.protocol = SASL_SSL
+sasl.mechanism = SCRAM-SHA-512
+sasl.jaas.config = org.apache.kafka.common.security.scram.ScramLoginModule required username="user" password="pass";
+ssl.keystore.location = /path/to/keystore.jks
+ssl.keystore.password = keystore-pass
+ssl.key.password = key-pass
+partitioner.class = org.apache.kafka.clients.producer.RoundRobinPartitioner
+```
+
+Ключевые моменты:
+- Префиксы `source.` и `target.` для настроек кластеров
+- `producer.override.` и `consumer.override.` для переопределения настроек
+- JAAS конфигурация в одну строку с экранированием переносов строк
