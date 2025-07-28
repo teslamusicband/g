@@ -1,0 +1,388 @@
+Вот несколько вариантов для работы с частями приложений ArgoCD через CLI:Также вот дополнительные полезные команды для работы с ArgoCD CLI:Ключевые моменты для вашего случая:
+
+**1. Фильтрация приложений:**
+- По префиксу имени (`java_project_`)
+- По namespace (`my_k8s_ns_for_java_project_*`)
+- По статусам отличным от Synced/Healthy
+
+**2. Работа с частями приложений:**
+- `argocd app delete-resource` - удаляет конкретный ресурс внутри приложения
+- `--cascade=foreground` - ждет полного удаления ресурса
+- `argocd app sync --resource` - синхронизирует только конкретный ресурс
+
+**3. Основные стратегии:**
+- **Полный цикл** - refresh → анализ → селективные операции → финальный sync
+- **По типам ресурсов** - обработка по очереди ConfigMap, Ingress, SparkApplication
+- **Интерактивный** - с подтверждением каждой операции
+- **Cleanup orphaned** - удаление ресурсов, отсутствующих в Git
+- **Batch с проверкой** - массовые операции с контролем результата
+
+**4. Важные команды:**
+- `argocd app get --refresh` - обновляет состояние из кластера
+- `argocd app sync --prune` - удаляет ресурсы, отсутствующие в Git
+- `argocd app wait` - ожидает завершения операций
+
+Выберите подходящий вариант в зависимости от ваших потребностей. Первый скрипт обеспечивает максимальную гибкость с разными режимами работы.
+
+
+
+
+
+№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№
+
+
+
+#!/bin/bash
+
+# Конфигурация
+ARGOCD_SERVER="your-argocd-server"
+APP_PREFIX="java_project_"
+TARGET_NAMESPACE="my_k8s_ns_for_java_project_"
+RESOURCE_TYPES=("configmap" "ingress" "sparkapplication")
+
+# Функция для логирования
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Функция для получения списка приложений с фильтрацией
+get_filtered_apps() {
+    argocd app list -o json | jq -r '
+        .[] | 
+        select(
+            (.metadata.name | startswith("'$APP_PREFIX'")) and
+            (.spec.destination.namespace | startswith("'$TARGET_NAMESPACE'")) and
+            (.status.sync.status != "Synced" or .status.health.status != "Healthy")
+        ) | 
+        .metadata.name
+    '
+}
+
+# Функция для получения ресурсов приложения
+get_app_resources() {
+    local app_name=$1
+    argocd app get $app_name -o json | jq -r '
+        .status.resources[]? | 
+        select(.kind == "ConfigMap" or .kind == "Ingress" or .kind == "SparkApplication") |
+        "\(.kind)|\(.name)|\(.namespace)|\(.status)|\(.health.status // "Unknown")"
+    '
+}
+
+# Вариант 1: Полный цикл с детальной фильтрацией
+full_cycle_operations() {
+    log "=== Начало полного цикла операций ==="
+    
+    local apps=$(get_filtered_apps)
+    
+    for app in $apps; do
+        log "Обработка приложения: $app"
+        
+        # Получаем refresh для всего приложения
+        log "Выполняем refresh для $app"
+        argocd app get $app --refresh
+        
+        # Получаем список ресурсов
+        local resources=$(get_app_resources $app)
+        
+        while IFS='|' read -r kind name namespace status health; do
+            if [[ -n "$kind" ]]; then
+                resource_path="$kind/$name"
+                
+                log "Анализ ресурса: $resource_path (Status: $status, Health: $health)"
+                
+                # Если ресурс OutOfSync - делаем sync
+                if [[ "$status" == "OutOfSync" ]]; then
+                    log "Синхронизация ресурса $resource_path в $app"
+                    argocd app sync $app --resource $kind:$name
+                fi
+                
+                # Если ресурс Degraded - делаем foreground delete + sync
+                if [[ "$health" == "Degraded" ]]; then
+                    log "Foreground delete для degraded ресурса $resource_path в $app"
+                    argocd app delete-resource $app --kind $kind --name $name --force --cascade=foreground
+                    sleep 5
+                    log "Повторная синхронизация после удаления"
+                    argocd app sync $app --resource $kind:$name
+                fi
+            fi
+        done <<< "$resources"
+        
+        # Финальная синхронизация всего приложения
+        log "Финальная синхронизация приложения $app"
+        argocd app sync $app
+        
+        log "Завершена обработка $app"
+        echo "---"
+    done
+}
+
+# Вариант 2: Выборочные операции по типам ресурсов
+selective_operations_by_type() {
+    log "=== Выборочные операции по типам ресурсов ==="
+    
+    local apps=$(get_filtered_apps)
+    
+    for app in $apps; do
+        log "Обработка приложения: $app"
+        
+        # Refresh приложения
+        argocd app get $app --refresh
+        
+        for resource_type in "${RESOURCE_TYPES[@]}"; do
+            log "Обработка ресурсов типа $resource_type в $app"
+            
+            # Получаем ресурсы конкретного типа
+            local type_resources=$(argocd app get $app -o json | jq -r "
+                .status.resources[]? | 
+                select(.kind == \"$(echo $resource_type | sed 's/^./\U&/')\" or .kind == \"$(echo $resource_type)\") |
+                \"\(.name)|\(.status)|\(.health.status // \"Unknown\")\"
+            ")
+            
+            while IFS='|' read -r name status health; do
+                if [[ -n "$name" ]]; then
+                    if [[ "$status" == "OutOfSync" || "$health" == "Degraded" ]]; then
+                        log "Пересоздание ресурса $resource_type/$name"
+                        argocd app delete-resource $app --kind $resource_type --name $name --force --cascade=foreground
+                        sleep 3
+                        argocd app sync $app --resource $resource_type:$name
+                    fi
+                fi
+            done <<< "$type_resources"
+        done
+        
+        log "Завершена обработка $app"
+    done
+}
+
+# Вариант 3: Интерактивный режим с подтверждением
+interactive_operations() {
+    log "=== Интерактивный режим ==="
+    
+    local apps=$(get_filtered_apps)
+    
+    for app in $apps; do
+        echo "Приложение: $app"
+        argocd app get $app --refresh > /dev/null
+        
+        local resources=$(get_app_resources $app)
+        
+        while IFS='|' read -r kind name namespace status health; do
+            if [[ -n "$kind" ]]; then
+                if [[ "$status" != "Synced" || "$health" != "Healthy" ]]; then
+                    echo "Ресурс: $kind/$name - Status: $status, Health: $health"
+                    read -p "Выполнить операции для этого ресурса? (y/n/s/d): " choice
+                    
+                    case $choice in
+                        y|Y)
+                            if [[ "$status" == "OutOfSync" ]]; then
+                                argocd app sync $app --resource $kind:$name
+                            fi
+                            if [[ "$health" == "Degraded" ]]; then
+                                argocd app delete-resource $app --kind $kind --name $name --force --cascade=foreground
+                                sleep 3
+                                argocd app sync $app --resource $kind:$name
+                            fi
+                            ;;
+                        s|S)
+                            argocd app sync $app --resource $kind:$name
+                            ;;
+                        d|D)
+                            argocd app delete-resource $app --kind $kind --name $name --force --cascade=foreground
+                            sleep 3
+                            argocd app sync $app --resource $kind:$name
+                            ;;
+                        *)
+                            echo "Пропускаем ресурс"
+                            ;;
+                    esac
+                fi
+            fi
+        done <<< "$resources"
+    done
+}
+
+# Вариант 4: Только удаление "мертвых" ресурсов (отсутствующих в Git)
+cleanup_orphaned_resources() {
+    log "=== Очистка orphaned ресурсов ==="
+    
+    local apps=$(get_filtered_apps)
+    
+    for app in $apps; do
+        log "Проверка orphaned ресурсов в $app"
+        
+        # Получаем ресурсы, которые есть в кластере, но отсутствуют в Git
+        argocd app get $app -o json | jq -r '
+            .status.resources[]? | 
+            select(.status == "Pruned" or .orphaned == true) |
+            select(.kind == "ConfigMap" or .kind == "Ingress" or .kind == "SparkApplication") |
+            "\(.kind)|\(.name)"
+        ' | while IFS='|' read -r kind name; do
+            if [[ -n "$kind" ]]; then
+                log "Удаление orphaned ресурса $kind/$name из $app"
+                argocd app delete-resource $app --kind $kind --name $name --force --cascade=foreground
+            fi
+        done
+        
+        # Финальная синхронизация
+        argocd app sync $app --prune
+    done
+}
+
+# Вариант 5: Массовое обновление с проверкой состояния
+batch_update_with_health_check() {
+    log "=== Массовое обновление с проверкой ==="
+    
+    local apps=$(get_filtered_apps)
+    
+    for app in $apps; do
+        log "Начало обработки $app"
+        
+        # Сначала делаем refresh
+        argocd app get $app --refresh
+        
+        # Проверяем общий статус приложения
+        local app_sync=$(argocd app get $app -o json | jq -r '.status.sync.status')
+        local app_health=$(argocd app get $app -o json | jq -r '.status.health.status')
+        
+        log "Статус приложения $app: Sync=$app_sync, Health=$app_health"
+        
+        if [[ "$app_sync" != "Synced" || "$app_health" != "Healthy" ]]; then
+            # Получаем проблемные ресурсы наших типов
+            get_app_resources $app | while IFS='|' read -r kind name namespace status health; do
+                if [[ -n "$kind" && ("$status" != "Synced" || "$health" != "Healthy") ]]; then
+                    log "Пересоздание проблемного ресурса $kind/$name"
+                    
+                    # Foreground delete
+                    argocd app delete-resource $app --kind $kind --name $name --force --cascade=foreground
+                    
+                    # Ждем удаления
+                    local wait_count=0
+                    while [[ $wait_count -lt 30 ]]; do
+                        if ! kubectl get $kind $name -n $namespace 2>/dev/null; then
+                            break
+                        fi
+                        sleep 2
+                        ((wait_count++))
+                    done
+                    
+                    # Синхронизируем конкретный ресурс
+                    argocd app sync $app --resource $kind:$name
+                    
+                    # Проверяем результат
+                    sleep 5
+                    local new_status=$(argocd app get $app -o json | jq -r ".status.resources[] | select(.kind==\"$kind\" and .name==\"$name\") | .status")
+                    log "Новый статус $kind/$name: $new_status"
+                fi
+            done
+        fi
+        
+        log "Завершена обработка $app"
+    done
+}
+
+# Основная функция с выбором режима
+main() {
+    echo "Выберите режим работы:"
+    echo "1) Полный цикл с детальной фильтрацией"
+    echo "2) Выборочные операции по типам ресурсов"
+    echo "3) Интерактивный режим"
+    echo "4) Только очистка orphaned ресурсов"
+    echo "5) Массовое обновление с проверкой"
+    
+    read -p "Введите номер (1-5): " mode
+    
+    case $mode in
+        1) full_cycle_operations ;;
+        2) selective_operations_by_type ;;
+        3) interactive_operations ;;
+        4) cleanup_orphaned_resources ;;
+        5) batch_update_with_health_check ;;
+        *) echo "Неверный выбор" ;;
+    esac
+}
+
+# Запуск если скрипт вызван напрямую
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
+
+
+
+
+
+
+
+№№№№№№№№№№№№№№№№№№№№№№№№№№№№№
+
+
+
+# Полезные команды ArgoCD CLI для работы с ресурсами
+
+# 1. Получить детальную информацию о ресурсах приложения
+argocd app get java_project_1 -o json | jq '.status.resources[] | select(.kind=="ConfigMap" or .kind=="Ingress" or .kind=="SparkApplication")'
+
+# 2. Фильтрация приложений по статусу и health
+argocd app list -o json | jq -r '.[] | select(.status.sync.status != "Synced" or .status.health.status != "Healthy") | .metadata.name'
+
+# 3. Получить только проблемные ресурсы конкретного приложения
+argocd app get java_project_1 -o json | jq -r '.status.resources[] | select((.kind=="ConfigMap" or .kind=="Ingress" or .kind=="SparkApplication") and (.status != "Synced" or (.health.status // "Unknown") != "Healthy")) | "\(.kind)/\(.name) - Status: \(.status), Health: \(.health.status // "Unknown")"'
+
+# 4. Удаление конкретного ресурса с foreground cascade
+argocd app delete-resource java_project_1 --kind ConfigMap --name my-config --force --cascade=foreground
+
+# 5. Синхронизация только конкретного ресурса
+argocd app sync java_project_1 --resource ConfigMap:my-config
+
+# 6. Получить orphaned ресурсы (есть в кластере, но удалены из Git)
+argocd app get java_project_1 -o json | jq '.status.resources[] | select(.orphaned == true or .status == "Pruned")'
+
+# 7. Принудительный refresh и sync с prune
+argocd app get java_project_1 --refresh
+argocd app sync java_project_1 --prune --force
+
+# 8. Проверка статуса конкретных типов ресурсов
+for resource_type in ConfigMap Ingress SparkApplication; do
+    echo "=== $resource_type ==="
+    argocd app get java_project_1 -o json | jq -r ".status.resources[] | select(.kind==\"$resource_type\") | \"\(.name): \(.status) / \(.health.status // \"Unknown\")\""
+done
+
+# 9. Мониторинг изменений в реальном времени
+argocd app wait java_project_1 --sync --health --timeout 300
+
+# 10. Получение логов операций синхронизации
+argocd app logs java_project_1 --follow
+
+# 11. Rollback к предыдущей ревизии
+argocd app rollback java_project_1
+
+# 12. Получить различия между Git и кластером
+argocd app diff java_project_1
+
+# 13. Установка параметров приложения для автоматических операций
+argocd app set java_project_1 --sync-policy automated --auto-prune --self-heal
+
+# 14. Получить историю операций
+argocd app history java_project_1
+
+# 15. Патч ресурса через ArgoCD (если нужно изменить что-то напрямую)
+argocd app patch-resource java_project_1 --kind ConfigMap --name my-config --patch '{"data":{"key":"new-value"}}' --patch-type merge
+
+# 16. Проверка health всех ресурсов приложения
+argocd app get java_project_1 -o json | jq -r '.status.resources[] | "\(.kind)/\(.name): \(.health.status // "Unknown") - \(.health.message // "")"'
+
+# 17. Suspend/Resume приложения (приостановка автосинхронизации)
+argocd app set java_project_1 --suspend
+argocd app set java_project_1 --resume
+
+# 18. Получить ресурсы с ошибками
+argocd app get java_project_1 -o json | jq -r '.status.resources[] | select(.health.status == "Degraded" or .health.status == "Missing") | "\(.kind)/\(.name): \(.health.message // "No message")"'
+
+# 19. Массовые операции с несколькими приложениями
+for app in java_project_{1..5}; do
+    echo "Processing $app"
+    argocd app get $app --refresh
+    argocd app sync $app --timeout 300
+done
+
+# 20. Проверка ресурсов, ожидающих удаления (finalizers)
+kubectl get configmaps,ingresses,sparkapplications -A -o json | jq -r '.items[] | select(.metadata.deletionTimestamp != null) | "\(.kind)/\(.metadata.name) in \(.metadata.namespace)"'
