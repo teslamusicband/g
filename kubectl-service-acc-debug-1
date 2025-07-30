@@ -1,0 +1,194 @@
+Проблема в том, что у вас есть несколько различных аспектов, которые нужно разделить и решить по порядку. Давайте разберемся:
+
+## 1. Диагностика текущего состояния
+
+Сначала выясним, что у вас есть внутри контейнера:
+
+```bash
+# Проверяем, что доступно в Service Account
+ls -la /var/run/secrets/kubernetes.io/serviceaccount/
+cat /var/run/secrets/kubernetes.io/serviceaccount/namespace
+echo "Token length: $(cat /var/run/secrets/kubernetes.io/serviceaccount/token | wc -c)"
+
+# Проверяем переменные окружения Kubernetes
+env | grep KUBERNETES
+
+# Проверяем сетевую доступность к API серверу
+nslookup kubernetes.default.svc.cluster.local
+nc -zv kubernetes.default.svc.cluster.local 443
+```
+
+## 2. Проверка RBAC прав для Service Account
+
+Основная проблема в том, что ваш Service Account не имеет нужных прав. Проверим и настроим:
+
+```bash
+# Узнаем имя текущего Service Account
+kubectl auth whoami 2>/dev/null || echo "No access"
+
+# Проверяем права текущего Service Account
+kubectl auth can-i get pods
+kubectl auth can-i get nodes
+kubectl auth can-i get namespaces
+```
+
+## 3. Создание правильных RBAC правил
+
+Создайте следующие ресурсы в кластере (применить нужно **снаружи** контейнера, с правами администратора):
+
+```yaml
+# rbac-gitlab-runner.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gitlab-runner
+  namespace: default  # или ваш namespace где запущен gitlab-runner
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gitlab-runner-role
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "pods", "services", "endpoints", "persistentvolumeclaims", "events", "configmaps", "secrets", "namespaces"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "daemonsets", "replicasets", "statefulsets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["extensions"]
+  resources: ["ingresses", "deployments"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gitlab-runner-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gitlab-runner-role
+subjects:
+- kind: ServiceAccount
+  name: gitlab-runner
+  namespace: default  # или ваш namespace
+```
+
+Примените эти правила:
+```bash
+kubectl apply -f rbac-gitlab-runner.yaml
+```
+
+## 4. Обновите конфигурацию GitLab Runner
+
+В конфигурации GitLab Runner укажите созданный Service Account:
+
+```yaml
+# В deployment или pod GitLab Runner добавьте:
+spec:
+  serviceAccountName: gitlab-runner
+  # остальная конфигурация
+```
+
+## 5. Альтернативный подход - использование существующих учетных данных
+
+Если вы хотите использовать существующие учетные данные из внешней VM, создайте Secret:
+
+```bash
+# На внешней VM с рабочим kubectl
+kubectl create secret generic kubeconfig-secret \
+  --from-file=config=/home/user1/.kube/config \
+  --namespace=default  # namespace где работает gitlab-runner
+```
+
+Затем в GitLab CI используйте:
+
+```yaml
+deploy:
+  image: alpine:3.20.6
+  before_script:
+    - apk add --no-cache curl
+    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    - chmod +x kubectl && mv kubectl /usr/local/bin/
+    - mkdir -p ~/.kube
+    # Копируем конфигурацию из secret
+    - cp /etc/kubeconfig/config ~/.kube/config
+  script:
+    - kubectl cluster-info
+    - kubectl get pods
+  volumes:
+    - name: kubeconfig
+      secret:
+        secretName: kubeconfig-secret
+  volumeMounts:
+    - name: kubeconfig
+      mountPath: /etc/kubeconfig
+      readOnly: true
+```
+
+## 6. Простая диагностика подключения
+
+Создайте диагностический скрипт:
+
+```bash
+#!/bin/sh
+# diagnose-k8s.sh
+
+echo "=== Kubernetes Connectivity Diagnostics ==="
+
+echo "1. Service Account files:"
+ls -la /var/run/secrets/kubernetes.io/serviceaccount/ 2>/dev/null || echo "No SA files found"
+
+echo "2. Environment variables:"
+env | grep KUBERNETES || echo "No K8s env vars"
+
+echo "3. DNS resolution:"
+nslookup kubernetes.default.svc.cluster.local || echo "DNS failed"
+
+echo "4. Network connectivity:"
+nc -zv kubernetes.default.svc.cluster.local 443 2>/dev/null || echo "Cannot connect to K8s API"
+
+echo "5. API Server response:"
+curl -k -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null)" \
+     https://kubernetes.default.svc.cluster.local/api/v1/ 2>/dev/null | head -n 5 || echo "API call failed"
+
+echo "6. Current namespace:"
+cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo "No namespace file"
+```
+
+## 7. Минимальная рабочая конфигурация для тестирования
+
+```bash
+# Простейший тест внутри контейнера
+export KUBERNETES_SERVICE_HOST=kubernetes.default.svc.cluster.local
+export KUBERNETES_SERVICE_PORT=443
+
+# Создаем минимальный kubeconfig
+mkdir -p ~/.kube
+cat > ~/.kube/config << 'EOF'
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://kubernetes.default.svc.cluster.local
+    insecure-skip-tls-verify: true  # только для тестирования!
+  name: local
+contexts:
+- context:
+    cluster: local
+    user: local
+  name: local
+current-context: local
+users:
+- name: local
+  user:
+    token: TOKEN_PLACEHOLDER
+EOF
+
+# Заменяем токен
+sed -i "s/TOKEN_PLACEHOLDER/$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)/" ~/.kube/config
+
+# Тестируем
+kubectl cluster-info
+```
+
+Начните с диагностики (пункт 6) и настройки RBAC (пункты 3-4). Это должно решить проблему с доступом.
