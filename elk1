@@ -1,0 +1,462 @@
+Создам простую инструкцию для запуска Elasticsearch и Kibana в Docker контейнерах на одном сервере OEL 9.4.Создал максимально простую инструкцию для запуска Elasticsearch и Kibana в Docker контейнерах на OEL 9.4. 
+
+**Ключевые особенности этой конфигурации:**
+
+✅ **Максимально просто:**
+- Без SSL сертификатов
+- Без аутентификации 
+- Один сервер (single-node)
+- Готовый docker-compose.yml
+
+✅ **С предварительным созданием директорий:**
+- `elasticsearch/data` и `elasticsearch/logs`
+- `kibana/data` 
+- Правильные права доступа (UID 1000)
+
+✅ **Минимальная настройка:**
+- Только необходимые системные параметры
+- Открытие портов в файрволе
+- Базовые настройки памяти
+
+**Быстрый запуск:**
+1. Установка Docker
+2. Создание директорий
+3. Создание docker-compose.yml
+4. `docker compose up -d`
+
+**Результат:**
+- Elasticsearch доступен на `http://localhost:9200`
+- Kibana доступен на `http://localhost:5601`
+- Готов к использованию через 2-3 минуты
+
+Также включил скрипт для удобного управления (`manage.sh`) и раздел устранения неисправностей для самых частых проблем.
+
+
+##################
+
+# Запуск Elasticsearch и Kibana в Docker на Oracle Enterprise Linux 9.4
+
+## Предварительные требования
+
+- Oracle Enterprise Linux 9.4
+- Минимум 4GB RAM (рекомендуется 8GB+)
+- Минимум 20GB свободного места на диске
+
+## Шаг 1: Установка Docker
+
+### 1.1 Установка Docker Engine
+```bash
+# Обновление системы
+sudo dnf update -y
+
+# Установка необходимых пакетов
+sudo dnf install -y dnf-utils device-mapper-persistent-data lvm2
+
+# Добавление официального репозитория Docker
+sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
+# Установка Docker
+sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Запуск и автозапуск Docker
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Добавление пользователя в группу docker (опционально)
+sudo usermod -aG docker $USER
+```
+
+### 1.2 Проверка установки Docker
+```bash
+# Проверка версии
+docker --version
+
+# Тест запуска
+sudo docker run hello-world
+```
+
+## Шаг 2: Подготовка директорий и настроек
+
+### 2.1 Создание рабочих директорий
+```bash
+# Создание основной директории проекта
+mkdir -p ~/elastic-stack
+cd ~/elastic-stack
+
+# Создание директорий для данных
+mkdir -p elasticsearch/data
+mkdir -p elasticsearch/logs
+mkdir -p kibana/data
+
+# Настройка прав доступа (UID 1000 для Elasticsearch в Docker)
+sudo chown -R 1000:1000 elasticsearch/
+sudo chown -R 1000:1000 kibana/
+```
+
+### 2.2 Настройка системных параметров
+```bash
+# Увеличение лимита виртуальной памяти для Elasticsearch
+echo 'vm.max_map_count=262144' | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+### 2.3 Настройка файрвола
+```bash
+# Открытие портов
+sudo firewall-cmd --permanent --add-port=9200/tcp  # Elasticsearch
+sudo firewall-cmd --permanent --add-port=5601/tcp  # Kibana
+sudo firewall-cmd --reload
+```
+
+## Шаг 3: Создание Docker Compose файла
+
+### 3.1 Создание docker-compose.yml
+```bash
+cd ~/elastic-stack
+cat > docker-compose.yml << 'EOF'
+version: '3.8'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    hostname: elasticsearch
+    environment:
+      # Базовые настройки кластера
+      - node.name=elasticsearch
+      - cluster.name=docker-cluster
+      - discovery.type=single-node
+      
+      # Отключение безопасности для простоты
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      
+      # Настройки памяти
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+      
+      # Сетевые настройки
+      - network.host=0.0.0.0
+      - http.port=9200
+      
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - ./elasticsearch/data:/usr/share/elasticsearch/data
+      - ./elasticsearch/logs:/usr/share/elasticsearch/logs
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - elastic
+    restart: unless-stopped
+    
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: kibana
+    hostname: kibana
+    environment:
+      # Подключение к Elasticsearch
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      
+      # Сетевые настройки
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=5601
+      - SERVER_NAME=kibana
+      
+      # Отключение безопасности
+      - ELASTICSEARCH_USERNAME=
+      - ELASTICSEARCH_PASSWORD=
+      
+      # Настройки логирования
+      - LOGGING_ROOT_LEVEL=warn
+      
+    volumes:
+      - ./kibana/data:/usr/share/kibana/data
+    ports:
+      - "5601:5601"
+    networks:
+      - elastic
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+networks:
+  elastic:
+    driver: bridge
+
+volumes:
+  elasticsearch-data:
+  kibana-data:
+EOF
+```
+
+## Шаг 4: Запуск стека
+
+### 4.1 Запуск контейнеров
+```bash
+# Переход в директорию проекта
+cd ~/elastic-stack
+
+# Запуск в фоновом режиме
+sudo docker compose up -d
+
+# Просмотр логов (опционально)
+sudo docker compose logs -f
+```
+
+### 4.2 Проверка запуска
+```bash
+# Проверка статуса контейнеров
+sudo docker compose ps
+
+# Проверка логов Elasticsearch
+sudo docker compose logs elasticsearch
+
+# Проверка логов Kibana
+sudo docker compose logs kibana
+```
+
+## Шаг 5: Проверка работоспособности
+
+### 5.1 Тестирование Elasticsearch
+```bash
+# Проверка доступности Elasticsearch
+curl -X GET "localhost:9200"
+
+# Проверка состояния кластера
+curl -X GET "localhost:9200/_cluster/health?pretty"
+
+# Информация об узлах
+curl -X GET "localhost:9200/_nodes?pretty"
+```
+
+### 5.2 Тестирование Kibana
+```bash
+# Проверка доступности Kibana
+curl -I http://localhost:5601
+
+# Или открыть в браузере
+# http://your-server-ip:5601
+```
+
+## Шаг 6: Создание тестовых данных
+
+### 6.1 Создание индекса и добавление данных
+```bash
+# Создание тестового индекса
+curl -X PUT "localhost:9200/test-logs" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    },
+    "mappings": {
+      "properties": {
+        "timestamp": {"type": "date"},
+        "message": {"type": "text"},
+        "level": {"type": "keyword"},
+        "service": {"type": "keyword"}
+      }
+    }
+  }'
+
+# Добавление тестовых документов
+curl -X POST "localhost:9200/test-logs/_doc" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timestamp": "2024-01-15T10:00:00",
+    "message": "Application started successfully",
+    "level": "INFO",
+    "service": "web-server"
+  }'
+
+curl -X POST "localhost:9200/test-logs/_doc" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timestamp": "2024-01-15T10:05:00",
+    "message": "Database connection established",
+    "level": "INFO",
+    "service": "database"
+  }'
+
+curl -X POST "localhost:9200/test-logs/_doc" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timestamp": "2024-01-15T10:10:00",
+    "message": "Error processing request",
+    "level": "ERROR",
+    "service": "api"
+  }'
+```
+
+### 6.2 Проверка данных
+```bash
+# Поиск всех документов в индексе
+curl -X GET "localhost:9200/test-logs/_search?pretty"
+
+# Проверка количества документов
+curl -X GET "localhost:9200/test-logs/_count?pretty"
+```
+
+## Управление контейнерами
+
+### Основные команды
+```bash
+# Остановка контейнеров
+sudo docker compose stop
+
+# Запуск остановленных контейнеров
+sudo docker compose start
+
+# Перезапуск контейнеров
+sudo docker compose restart
+
+# Остановка и удаление контейнеров
+sudo docker compose down
+
+# Остановка и удаление контейнеров с данными
+sudo docker compose down -v
+
+# Просмотр логов
+sudo docker compose logs elasticsearch
+sudo docker compose logs kibana
+sudo docker compose logs -f  # следить за логами в реальном времени
+
+# Выполнение команд внутри контейнера
+sudo docker compose exec elasticsearch bash
+sudo docker compose exec kibana bash
+```
+
+## Полезные настройки
+
+### Изменение выделяемой памяти для Elasticsearch
+Отредактируйте в `docker-compose.yml`:
+```yaml
+environment:
+  - "ES_JAVA_OPTS=-Xms4g -Xmx4g"  # для серверов с 8GB+ RAM
+```
+
+### Добавление мониторинга дискового пространства
+```bash
+# Проверка размера директорий данных
+du -sh elasticsearch/data/
+du -sh kibana/data/
+
+# Мониторинг использования дискового пространства Docker
+sudo docker system df
+```
+
+## Устранение неисправностей
+
+### Общие проблемы
+
+1. **Elasticsearch не запускается из-за памяти**:
+   ```bash
+   # Проверка логов
+   sudo docker compose logs elasticsearch
+   
+   # Уменьшение выделяемой памяти в docker-compose.yml
+   - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+   ```
+
+2. **Проблемы с правами доступа**:
+   ```bash
+   # Исправление прав доступа
+   sudo chown -R 1000:1000 elasticsearch/
+   sudo chown -R 1000:1000 kibana/
+   ```
+
+3. **Kibana не может подключиться к Elasticsearch**:
+   ```bash
+   # Проверка сетевого подключения между контейнерами
+   sudo docker compose exec kibana curl http://elasticsearch:9200
+   ```
+
+4. **Порты заняты**:
+   ```bash
+   # Проверка занятых портов
+   sudo netstat -tlnp | grep :9200
+   sudo netstat -tlnp | grep :5601
+   ```
+
+## Создание скрипта для автоматизации
+
+### Скрипт управления (manage.sh)
+```bash
+cat > manage.sh << 'EOF'
+#!/bin/bash
+
+case "$1" in
+    start)
+        echo "Starting Elastic Stack..."
+        sudo docker compose up -d
+        echo "Waiting for services to be ready..."
+        sleep 30
+        echo "Elasticsearch: http://localhost:9200"
+        echo "Kibana: http://localhost:5601"
+        ;;
+    stop)
+        echo "Stopping Elastic Stack..."
+        sudo docker compose stop
+        ;;
+    restart)
+        echo "Restarting Elastic Stack..."
+        sudo docker compose restart
+        ;;
+    status)
+        sudo docker compose ps
+        ;;
+    logs)
+        sudo docker compose logs -f
+        ;;
+    clean)
+        echo "Removing containers and data..."
+        sudo docker compose down -v
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status|logs|clean}"
+        exit 1
+        ;;
+esac
+EOF
+
+chmod +x manage.sh
+```
+
+### Использование скрипта
+```bash
+# Запуск
+./manage.sh start
+
+# Остановка
+./manage.sh stop
+
+# Статус
+./manage.sh status
+
+# Просмотр логов
+./manage.sh logs
+```
+
+## Быстрый старт (одной командой)
+```bash
+# Создание всей структуры и запуск одной командой
+mkdir -p ~/elastic-stack && cd ~/elastic-stack && \
+mkdir -p elasticsearch/{data,logs} kibana/data && \
+sudo chown -R 1000:1000 elasticsearch/ kibana/ && \
+echo 'vm.max_map_count=262144' | sudo tee -a /etc/sysctl.conf && \
+sudo sysctl -p && \
+curl -o docker-compose.yml https://raw.githubusercontent.com/your-repo/elastic-stack/main/docker-compose.yml && \
+sudo docker compose up -d
+```
+
+Стек Elasticsearch и Kibana готов к использованию! Откройте браузер и перейдите по адресу `http://your-server-ip:5601` для доступа к Kibana.
