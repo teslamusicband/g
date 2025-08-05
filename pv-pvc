@@ -1,0 +1,82 @@
+# Persistent Volume (PV) для NFS
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-pv-example
+  labels:
+    app: my-app
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany  # NFS поддерживает множественное подключение
+  persistentVolumeReclaimPolicy: Retain  # Retain вместо Delete для сохранения данных
+  storageClassName: nfs  # Укажите ваш storage class
+  nfs:
+    server: 10.217.1.1  # Замените на IP вашего NFS сервера
+    path: /exports/my-app-data  # Путь на NFS сервере
+
+---
+
+# Persistent Volume Claim (PVC)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-pvc-example
+  namespace: default  # Укажите нужный namespace
+spec:
+  accessModes:
+    - ReadWriteMany  # Должен совпадать с PV
+  resources:
+    requests:
+      storage: 10Gi  # Размер должен совпадать с PV
+  storageClassName: nfs  # Должен совпадать с PV
+  selector:  # Опционально - для привязки к конкретному PV
+    matchLabels:
+      app: my-app
+
+---
+
+# Пример использования в Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: my-app
+        image: nginx
+        volumeMounts:
+        - name: nfs-storage
+          mountPath: /data
+      volumes:
+      - name: nfs-storage
+        persistentVolumeClaim:
+          claimName: nfs-pvc-example
+
+---
+
+# Если используете dynamic provisioning (автоматическое создание PV)
+# Тогда создавайте только PVC без указания selector:
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dynamic-nfs-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: nfs  # StorageClass должен существовать
