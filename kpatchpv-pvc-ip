@@ -1,0 +1,99 @@
+## Что такое PV и PVC?
+
+**PV (PersistentVolume)** - это ресурс хранения в кластере Kubernetes. Это абстракция над физическим хранилищем (NFS, AWS EBS, и т.д.).
+
+**PVC (PersistentVolumeClaim)** - это запрос на хранилище от пода. PVC "связывается" с подходящим PV.
+
+**Связь:** Pod → PVC → PV → Реальное хранилище (ваш NFS сервер)
+
+## Проблема
+
+У вас изменился IP NFS сервера, но старые PV все еще ссылаются на старый IP. Нужно обновить эти ссылки.
+
+## Решение 1: Обновление существующих PV (быстрое)
+
+1. **Посмотрите какие PV ссылаются на старый NFS:**
+```bash
+kubectl get pv -o wide
+kubectl get pv -o yaml | grep -A5 -B5 "старый-IP"
+```
+
+2. **Обновите IP в каждом PV:**
+```bash
+# Для каждого PV с неправильным IP
+kubectl edit pv <имя-pv>
+
+# В редакторе найдите секцию nfs и измените server:
+spec:
+  nfs:
+    server: <новый-IP-nfs-сервера>  # Измените здесь
+    path: /exports/...
+```
+
+3. **Или через patch (быстрее для множественных PV):**
+```bash
+# Замените СТАРЫЙ_IP и НОВЫЙ_IP
+kubectl get pv -o name | xargs -I {} kubectl patch {} --type='merge' -p='{"spec":{"nfs":{"server":"НОВЫЙ_IP"}}}'
+```
+
+## Решение 2: Пересоздание PV и PVC (более чистое)
+
+1. **Сохраните данные приложений** (если важны)
+
+2. **Удалите PVC (это также удалит связанные PV если Reclaim Policy = Delete):**
+```bash
+kubectl get pvc
+kubectl delete pvc <имя-pvc-1> <имя-pvc-2> ...
+```
+
+3. **Если PV остались (Reclaim Policy = Retain), удалите их:**
+```bash
+kubectl get pv
+kubectl delete pv <имя-pv-1> <имя-pv-2> ...
+```
+
+4. **Передеплойте приложения** - новые PVC будут созданы автоматически с правильным IP NFS сервера.
+
+## Решение 3: Автоматическое обновление через скрипт
+
+```bash
+#!/bin/bash
+OLD_IP="старый-IP"
+NEW_IP="новый-IP"
+
+echo "Обновляем PV с $OLD_IP на $NEW_IP"
+
+for pv in $(kubectl get pv -o jsonpath='{.items[*].metadata.name}'); do
+  current_server=$(kubectl get pv $pv -o jsonpath='{.spec.nfs.server}' 2>/dev/null)
+  if [ "$current_server" = "$OLD_IP" ]; then
+    echo "Обновляем PV: $pv"
+    kubectl patch pv $pv --type='merge' -p="{\"spec\":{\"nfs\":{\"server\":\"$NEW_IP\"}}}"
+  fi
+done
+```
+
+## Проверка нового IP NFS сервера
+
+```bash
+# Узнайте новый IP
+kubectl get svc nfs-server-provisioner -o wide
+
+# Или если это ClusterIP
+kubectl get svc nfs-server-provisioner -o jsonpath='{.spec.clusterIP}'
+```
+
+## Рекомендация
+
+**Используйте Решение 1** (обновление через edit/patch) если:
+- У вас есть важные данные в PV
+- Хотите избежать даунтайма
+
+**Используйте Решение 2** (пересоздание) если:
+- Данные не критичны или есть бэкапы
+- Хотите "чистое" состояние
+- У вас много PV с неправильными IP
+
+После любого решения перезапустите поды приложений:
+```bash
+kubectl rollout restart deployment <ваше-приложение>
+```
