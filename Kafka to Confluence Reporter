@@ -1,0 +1,592 @@
+Создам для вас Python-скрипт, который собирает информацию из Kafka кластера и создает отчет в Confluence.Теперь создам также файл с требованиями и инструкцией по использованию:Я создал полнофункциональный Python-скрипт для сбора информации из Kafka кластера и создания отчетов в Confluence. Вот основные особенности решения:
+
+## Функциональность:
+
+**Сбор данных из Kafka:**
+- Информация о брокерах (ID, адрес, порт, версия, rack)
+- Детальная информация о топиках (партиции, фактор репликации, retention настройки)
+- Автоматическое исключение внутренних системных топиков
+
+**Создание отчета в Confluence:**
+- Автоматическое создание подстраницы с временной меткой
+- Форматированные таблицы с собранными данными
+- Сводная статистика по кластеру
+
+## Для использования вам нужно:
+
+1. **Установить зависимости:**
+   ```bash
+   pip install kafka-python atlassian-python-api
+   ```
+
+2. **Настроить переменные окружения:**
+   - `KAFKA_BOOTSTRAP_SERVERS` - адреса брокеров Kafka
+   - `CONFLUENCE_URL` - URL вашего Confluence
+   - `CONFLUENCE_USERNAME` - ваш email/логин
+   - `CONFLUENCE_PASSWORD` - API токен для Confluence
+   - `CONFLUENCE_SPACE_KEY` - ключ Space в Confluence
+   - `CONFLUENCE_PARENT_PAGE_ID` - ID родительской страницы
+
+3. **Запустить скрипт:**
+   ```bash
+   python kafka_confluence_reporter.py
+   ```
+
+Скрипт включает обработку ошибок, подробное логирование и создает профессионально оформленные отчеты с таблицами в Confluence. Код легко расширяется для добавления новых метрик или изменения формата отчета.
+
+
+
+
+
+
+
+
+# Kafka to Confluence Reporter
+
+## Описание
+
+Этот скрипт собирает информацию из Kafka кластера (брокеры и топики) и создает детальный отчет в Confluence в виде таблиц.
+
+## Требования
+
+### Системные требования
+- Python 3.7+
+- Доступ к Kafka кластеру
+- Доступ к Confluence (Cloud или Server)
+
+### Зависимости Python
+
+```bash
+pip install kafka-python atlassian-python-api
+```
+
+Или создайте файл `requirements.txt`:
+```
+kafka-python==2.0.2
+atlassian-python-api==3.41.0
+```
+
+## Настройка
+
+### 1. Переменные окружения
+
+Создайте файл `.env` или установите переменные окружения:
+
+```bash
+# Kafka настройки
+export KAFKA_BOOTSTRAP_SERVERS="kafka-broker1:9092,kafka-broker2:9092,kafka-broker3:9092"
+
+# Confluence настройки
+export CONFLUENCE_URL="https://your-company.atlassian.net"
+export CONFLUENCE_USERNAME="your-email@company.com"
+export CONFLUENCE_PASSWORD="your-api-token"
+export CONFLUENCE_SPACE_KEY="DEV"  # Ключ вашего Space в Confluence
+export CONFLUENCE_PARENT_PAGE_ID="123456789"  # ID родительской страницы
+```
+
+### 2. Confluence API Token
+
+Для Confluence Cloud:
+1. Перейдите в [Atlassian Account Settings](https://id.atlassian.com/manage-profile/security/api-tokens)
+2. Создайте новый API токен
+3. Используйте его как `CONFLUENCE_PASSWORD`
+
+Для Confluence Server:
+- Используйте обычный пароль пользователя
+
+### 3. Получение Page ID
+
+Чтобы получить ID родительской страницы:
+1. Откройте страницу в Confluence
+2. Нажмите "..." → "Page Information"
+3. ID страницы будет в URL или в информации о странице
+
+## Использование
+
+### Базовое использование
+
+```bash
+python kafka_confluence_reporter.py
+```
+
+### С собственными настройками в коде
+
+Вы можете изменить конфигурацию прямо в коде, отредактировав словарь `config` в функции `main()`.
+
+### Пример запуска с переменными окружения
+
+```bash
+KAFKA_BOOTSTRAP_SERVERS="localhost:9092" \
+CONFLUENCE_URL="https://mycompany.atlassian.net" \
+CONFLUENCE_USERNAME="admin@mycompany.com" \
+CONFLUENCE_PASSWORD="ATATT3xFfGF0..." \
+CONFLUENCE_SPACE_KEY="DOCS" \
+CONFLUENCE_PARENT_PAGE_ID="98765432" \
+python kafka_confluence_reporter.py
+```
+
+## Собираемые данные
+
+### Информация о брокерах:
+- ID брокера
+- Адрес (хост)
+- Порт
+- Версия Kafka
+- Rack (если настроен)
+
+### Информация о топиках:
+- Название топика
+- Количество партиций
+- Фактор репликации
+- Retention time (мс)
+- Retention size (байты)
+- Приблизительный размер (если доступен)
+
+## Результат
+
+Скрипт создает новую подстраницу в Confluence с названием вида:
+`Kafka Cluster Report 2024-01-15_14-30-25`
+
+Страница содержит:
+- Таблицу с информацией о брокерах
+- Таблицу с информацией о топиках
+- Сводную статистику
+
+## Логирование
+
+Скрипт выводит подробные логи о процессе сбора данных и создания отчета. Уровень логирования можно изменить, отредактировав:
+
+```python
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+```
+
+## Возможные проблемы и решения
+
+### 1. Ошибки подключения к Kafka
+- Проверьте доступность брокеров
+- Убедитесь, что указаны правильные адреса и порты
+- Проверьте сетевые настройки и firewall
+
+### 2. Ошибки аутентификации Confluence
+- Убедитесь, что API токен действителен
+- Проверьте права доступа к указанному Space
+- Убедитесь, что пользователь может создавать страницы
+
+### 3. Ошибки получения размера топиков
+- По умолчанию размер топиков не определяется точно
+- Для точного подсчета нужен доступ к JMX метрикам Kafka
+
+### 4. Таймауты
+- Увеличьте таймауты в конфигурации KafkaAdminClient
+- Для больших кластеров может потребоваться больше времени
+
+## Расширение функциональности
+
+### Добавление новых метрик
+1. Расширьте dataclass `BrokerInfo` или `TopicInfo`
+2. Добавьте логику сбора в соответствующих методах
+3. Обновите генерацию HTML таблиц
+
+### Изменение формата отчета
+Отредактируйте метод `_generate_page_content()` для изменения структуры и стиля страницы.
+
+### Добавление графиков
+Используйте Confluence макросы или интегрируйте с инструментами визуализации.
+
+## Автоматизация
+
+Для регулярного создания отчетов можно настроить:
+- Cron job (Linux/Mac)
+- Task Scheduler (Windows)
+- CI/CD pipeline
+- Kubernetes CronJob
+
+Пример cron job (каждый день в 9:00):
+```bash
+0 9 * * * /usr/bin/python3 /path/to/kafka_confluence_reporter.py >> /var/log/kafka-reporter.log 2>&1
+```
+
+
+
+
+
+
+
+
+
+
+
+#!/usr/bin/env python3
+"""
+Kafka to Confluence Reporter
+Собирает информацию из Kafka кластера и создает отчет в Confluence
+"""
+
+import os
+import json
+import logging
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass
+
+try:
+    from kafka import KafkaAdminClient, KafkaConsumer
+    from kafka.config import BrokerConnection
+    from kafka.protocol.admin import DescribeConfigsRequest_v2, DescribeConfigsResponse_v2
+    from kafka.protocol.metadata import MetadataRequest, MetadataResponse
+except ImportError:
+    print("Установите kafka-python: pip install kafka-python")
+    exit(1)
+
+try:
+    from atlassian import Confluence
+except ImportError:
+    print("Установите atlassian-python-api: pip install atlassian-python-api")
+    exit(1)
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class BrokerInfo:
+    """Информация о брокере"""
+    id: int
+    host: str
+    port: int
+    version: str
+    rack: Optional[str] = None
+
+
+@dataclass
+class TopicInfo:
+    """Информация о топике"""
+    name: str
+    partitions: int
+    replication_factor: int
+    retention_ms: Optional[int] = None
+    retention_bytes: Optional[int] = None
+    size_bytes: Optional[int] = None
+
+
+class KafkaInfoCollector:
+    """Сборщик информации из Kafka кластера"""
+    
+    def __init__(self, bootstrap_servers: str):
+        self.bootstrap_servers = bootstrap_servers
+        self.admin_client = KafkaAdminClient(
+            bootstrap_servers=bootstrap_servers,
+            client_id='kafka-info-collector'
+        )
+    
+    def get_broker_info(self) -> List[BrokerInfo]:
+        """Получает информацию о брокерах"""
+        logger.info("Получение информации о брокерах...")
+        
+        try:
+            # Получаем метаданные кластера
+            metadata = self.admin_client._client.cluster
+            brokers = []
+            
+            for broker in metadata.brokers():
+                # Пытаемся получить версию брокера
+                version = "Unknown"
+                try:
+                    # Создаем соединение с брокером для получения версии
+                    consumer = KafkaConsumer(
+                        bootstrap_servers=[f"{broker.host}:{broker.port}"],
+                        api_version_auto_timeout_ms=1000
+                    )
+                    version = str(consumer.config.get('api_version', 'Unknown'))
+                    consumer.close()
+                except Exception as e:
+                    logger.warning(f"Не удалось получить версию брокера {broker.nodeId}: {e}")
+                
+                broker_info = BrokerInfo(
+                    id=broker.nodeId,
+                    host=broker.host,
+                    port=broker.port,
+                    version=version,
+                    rack=getattr(broker, 'rack', None)
+                )
+                brokers.append(broker_info)
+                
+            logger.info(f"Найдено {len(brokers)} брокеров")
+            return brokers
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении информации о брокерах: {e}")
+            return []
+    
+    def get_topic_info(self) -> List[TopicInfo]:
+        """Получает информацию о топиках"""
+        logger.info("Получение информации о топиках...")
+        
+        try:
+            # Получаем список топиков
+            metadata = self.admin_client.list_topics()
+            topics = []
+            
+            for topic_name in metadata:
+                if topic_name.startswith('__'):  # Пропускаем внутренние топики
+                    continue
+                    
+                topic_metadata = self.admin_client.describe_topics([topic_name])
+                topic_config = self.admin_client.describe_configs(
+                    config_resources=[('topic', topic_name)]
+                )
+                
+                if topic_name in topic_metadata:
+                    partitions = len(topic_metadata[topic_name].partitions)
+                    replication_factor = len(topic_metadata[topic_name].partitions[0].replicas) if partitions > 0 else 0
+                else:
+                    partitions = 0
+                    replication_factor = 0
+                
+                # Получаем конфигурацию retention
+                retention_ms = None
+                retention_bytes = None
+                
+                if topic_name in topic_config:
+                    configs = topic_config[topic_name].configs
+                    retention_ms = configs.get('retention.ms', {}).get('value')
+                    retention_bytes = configs.get('retention.bytes', {}).get('value')
+                    
+                    if retention_ms:
+                        try:
+                            retention_ms = int(retention_ms)
+                        except ValueError:
+                            retention_ms = None
+                    
+                    if retention_bytes:
+                        try:
+                            retention_bytes = int(retention_bytes)
+                        except ValueError:
+                            retention_bytes = None
+                
+                # Примерный размер топика (требует дополнительной логики для точного подсчета)
+                size_bytes = self._estimate_topic_size(topic_name)
+                
+                topic_info = TopicInfo(
+                    name=topic_name,
+                    partitions=partitions,
+                    replication_factor=replication_factor,
+                    retention_ms=retention_ms,
+                    retention_bytes=retention_bytes,
+                    size_bytes=size_bytes
+                )
+                topics.append(topic_info)
+            
+            logger.info(f"Найдено {len(topics)} топиков")
+            return topics
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении информации о топиках: {e}")
+            return []
+    
+    def _estimate_topic_size(self, topic_name: str) -> Optional[int]:
+        """Приблизительная оценка размера топика"""
+        try:
+            consumer = KafkaConsumer(
+                topic_name,
+                bootstrap_servers=self.bootstrap_servers,
+                enable_auto_commit=False,
+                consumer_timeout_ms=1000
+            )
+            
+            # Получаем партиции топика
+            partitions = consumer.partitions_for_topic(topic_name)
+            if not partitions:
+                return None
+            
+            total_size = 0
+            # Это упрощенная логика - в реальности нужно использовать JMX или другие метрики
+            # Здесь мы просто возвращаем None, так как точный подсчет требует доступа к JMX
+            consumer.close()
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Не удалось оценить размер топика {topic_name}: {e}")
+            return None
+
+
+class ConfluenceReporter:
+    """Создание отчетов в Confluence"""
+    
+    def __init__(self, url: str, username: str, password: str):
+        self.confluence = Confluence(
+            url=url,
+            username=username,
+            password=password
+        )
+    
+    def create_report_page(self, parent_page_id: str, space_key: str, 
+                          brokers: List[BrokerInfo], topics: List[TopicInfo]) -> str:
+        """Создает страницу с отчетом в Confluence"""
+        
+        # Генерируем название страницы с текущей датой и временем
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        page_title = f"Kafka Cluster Report {timestamp}"
+        
+        logger.info(f"Создание страницы отчета: {page_title}")
+        
+        # Генерируем содержимое страницы
+        content = self._generate_page_content(brokers, topics, timestamp)
+        
+        try:
+            # Создаем страницу
+            page = self.confluence.create_page(
+                space=space_key,
+                title=page_title,
+                body=content,
+                parent_id=parent_page_id,
+                type='page',
+                representation='storage'
+            )
+            
+            page_url = f"{self.confluence.url}/pages/viewpage.action?pageId={page['id']}"
+            logger.info(f"Страница создана успешно: {page_url}")
+            return page_url
+            
+        except Exception as e:
+            logger.error(f"Ошибка при создании страницы: {e}")
+            raise
+    
+    def _generate_page_content(self, brokers: List[BrokerInfo], 
+                              topics: List[TopicInfo], timestamp: str) -> str:
+        """Генерирует HTML содержимое для страницы Confluence"""
+        
+        content = f"""
+        <h1>Kafka Cluster Report</h1>
+        <p><strong>Дата создания отчета:</strong> {timestamp}</p>
+        
+        <h2>Информация о брокерах</h2>
+        <table>
+            <tbody>
+                <tr>
+                    <th>ID Брокера</th>
+                    <th>Адрес</th>
+                    <th>Порт</th>
+                    <th>Версия</th>
+                    <th>Rack</th>
+                </tr>
+        """
+        
+        # Добавляем информацию о брокерах
+        for broker in brokers:
+            content += f"""
+                <tr>
+                    <td>{broker.id}</td>
+                    <td>{broker.host}</td>
+                    <td>{broker.port}</td>
+                    <td>{broker.version}</td>
+                    <td>{broker.rack or 'N/A'}</td>
+                </tr>
+            """
+        
+        content += """
+            </tbody>
+        </table>
+        
+        <h2>Информация о топиках</h2>
+        <table>
+            <tbody>
+                <tr>
+                    <th>Название топика</th>
+                    <th>Количество партиций</th>
+                    <th>Фактор репликации</th>
+                    <th>Retention (ms)</th>
+                    <th>Retention (bytes)</th>
+                    <th>Размер (bytes)</th>
+                </tr>
+        """
+        
+        # Добавляем информацию о топиках
+        for topic in topics:
+            retention_ms = f"{topic.retention_ms:,}" if topic.retention_ms else "N/A"
+            retention_bytes = f"{topic.retention_bytes:,}" if topic.retention_bytes else "N/A"
+            size_bytes = f"{topic.size_bytes:,}" if topic.size_bytes else "N/A"
+            
+            content += f"""
+                <tr>
+                    <td>{topic.name}</td>
+                    <td>{topic.partitions}</td>
+                    <td>{topic.replication_factor}</td>
+                    <td>{retention_ms}</td>
+                    <td>{retention_bytes}</td>
+                    <td>{size_bytes}</td>
+                </tr>
+            """
+        
+        content += """
+            </tbody>
+        </table>
+        
+        <h2>Сводная информация</h2>
+        <ul>
+            <li><strong>Общее количество брокеров:</strong> {}</li>
+            <li><strong>Общее количество топиков:</strong> {}</li>
+            <li><strong>Общее количество партиций:</strong> {}</li>
+        </ul>
+        """.format(
+            len(brokers),
+            len(topics),
+            sum(topic.partitions for topic in topics)
+        )
+        
+        return content
+
+
+def main():
+    """Основная функция"""
+    
+    # Конфигурация (можно вынести в конфигурационный файл или переменные окружения)
+    config = {
+        # Kafka настройки
+        'kafka_bootstrap_servers': os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092'),
+        
+        # Confluence настройки
+        'confluence_url': os.getenv('CONFLUENCE_URL', 'https://your-confluence-instance.atlassian.net'),
+        'confluence_username': os.getenv('CONFLUENCE_USERNAME', 'your-email@example.com'),
+        'confluence_password': os.getenv('CONFLUENCE_PASSWORD', 'your-api-token'),
+        'confluence_space_key': os.getenv('CONFLUENCE_SPACE_KEY', 'YOUR_SPACE'),
+        'confluence_parent_page_id': os.getenv('CONFLUENCE_PARENT_PAGE_ID', '123456789'),
+    }
+    
+    try:
+        # Собираем информацию из Kafka
+        logger.info("Начинаем сбор информации из Kafka кластера...")
+        kafka_collector = KafkaInfoCollector(config['kafka_bootstrap_servers'])
+        
+        brokers = kafka_collector.get_broker_info()
+        topics = kafka_collector.get_topic_info()
+        
+        if not brokers and not topics:
+            logger.warning("Не удалось собрать информацию из Kafka кластера")
+            return
+        
+        # Создаем отчет в Confluence
+        logger.info("Создание отчета в Confluence...")
+        confluence_reporter = ConfluenceReporter(
+            url=config['confluence_url'],
+            username=config['confluence_username'],
+            password=config['confluence_password']
+        )
+        
+        page_url = confluence_reporter.create_report_page(
+            parent_page_id=config['confluence_parent_page_id'],
+            space_key=config['confluence_space_key'],
+            brokers=brokers,
+            topics=topics
+        )
+        
+        logger.info(f"Отчет успешно создан: {page_url}")
+        
+    except Exception as e:
+        logger.error(f"Ошибка выполнения: {e}")
+        raise
+
+
+if __name__ == "__main__":
+    main()
