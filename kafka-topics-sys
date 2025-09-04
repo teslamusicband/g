@@ -1,0 +1,16 @@
+Вот таблица с описанием назначения топиков в Kafka кластере с MirrorMaker 2:
+
+| Топик | Назначение |
+|-------|------------|
+| `proj1-distributed-config` | Хранение конфигурации Kafka Connect для распределенного режима проекта proj1 |
+| `proj1-distributed-offset` | Отслеживание смещений (offsets) коннекторов Kafka Connect для proj1 |
+| `proj1-distributed-status` | Статус задач и коннекторов Kafka Connect для proj1 |
+| `__consumer_offsets` | Системный топик Kafka для хранения смещений потребительских групп |
+| `heartbeats` | Топик для синхронизации heartbeat сообщений между кластерами в MirrorMaker 2 |
+| `mm2-configs.source.internal` | Внутренняя репликация конфигураций коннекторов из source кластера |
+| `mm2-offset-syncstargetinternal` | Синхронизация смещений между source и target кластерами (возможно опечатка в названии) |
+| `mm2-offsets.source.internal` | Внутреннее отслеживание смещений для репликации из source кластера |
+| `mm2-status.source.internal` | Статус репликации и коннекторов для source кластера |
+| `mm2-status.source1.internal` | Статус репликации для конкретного source кластера (source1) |
+
+Все топики с префиксом `mm2-` относятся к внутренним процессам MirrorMaker 2 для обеспечения репликации данных между кластерами.
