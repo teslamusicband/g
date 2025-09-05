@@ -1,0 +1,203 @@
+#!/bin/bash
+
+# Скрипт для копирования каталога с пофайловым логированием
+# Использование: ./copy_dir.sh <источник> <назначение> [лог_файл]
+
+# Функция для вывода справки
+show_help() {
+    echo "Использование: $0 <источник> <назначение> [лог_файл]"
+    echo ""
+    echo "Параметры:"
+    echo "  источник    - исходный каталог для копирования"
+    echo "  назначение  - целевой каталог"
+    echo "  лог_файл    - файл для записи логов (по умолчанию: copy_log_YYYY-MM-DD_HH-MM-SS.log)"
+    echo ""
+    echo "Примеры:"
+    echo "  $0 /home/user/docs /backup/docs"
+    echo "  $0 /home/user/docs /backup/docs /var/log/copy.log"
+    exit 1
+}
+
+# Функция логирования
+log_message() {
+    local level=$1
+    local message=$2
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
+}
+
+# Функция для копирования с логированием
+copy_with_logging() {
+    local src="$1"
+    local dst="$2"
+    
+    # Проверяем, существует ли исходный файл/каталог
+    if [[ ! -e "$src" ]]; then
+        log_message "ERROR" "Источник не существует: $src"
+        return 1
+    fi
+    
+    # Получаем информацию о файле
+    local file_info=$(ls -la "$src" 2>/dev/null)
+    local file_size=$(du -h "$src" 2>/dev/null | cut -f1)
+    
+    # Если это каталог
+    if [[ -d "$src" ]]; then
+        # Создаем каталог назначения
+        if mkdir -p "$dst" 2>/dev/null; then
+            log_message "INFO" "Создан каталог: $dst"
+        else
+            log_message "ERROR" "Не удалось создать каталог: $dst"
+            return 1
+        fi
+        
+        # Копируем атрибуты каталога
+        if cp -p "$src/." "$dst/" 2>/dev/null; then
+            log_message "SUCCESS" "Скопированы атрибуты каталога: $src -> $dst"
+        fi
+        
+        return 0
+    fi
+    
+    # Если это файл
+    log_message "INFO" "Начинается копирование файла: $src (размер: $file_size)"
+    
+    # Создаем родительский каталог если нужно
+    local parent_dir=$(dirname "$dst")
+    if [[ ! -d "$parent_dir" ]]; then
+        if mkdir -p "$parent_dir" 2>/dev/null; then
+            log_message "INFO" "Создан родительский каталог: $parent_dir"
+        else
+            log_message "ERROR" "Не удалось создать родительский каталог: $parent_dir"
+            return 1
+        fi
+    fi
+    
+    # Копируем файл
+    if cp -p "$src" "$dst" 2>/dev/null; then
+        # Проверяем целостность копии
+        if [[ -f "$dst" ]]; then
+            local src_size=$(stat -c%s "$src" 2>/dev/null)
+            local dst_size=$(stat -c%s "$dst" 2>/dev/null)
+            
+            if [[ "$src_size" == "$dst_size" ]]; then
+                log_message "SUCCESS" "Файл успешно скопирован: $src -> $dst (размер: $file_size)"
+                ((COPIED_FILES++))
+            else
+                log_message "WARNING" "Размеры файлов не совпадают: $src ($src_size) -> $dst ($dst_size)"
+                ((WARNING_COUNT++))
+            fi
+        else
+            log_message "ERROR" "Файл не был создан: $dst"
+            ((ERROR_COUNT++))
+            return 1
+        fi
+    else
+        log_message "ERROR" "Не удалось скопировать файл: $src -> $dst"
+        ((ERROR_COUNT++))
+        return 1
+    fi
+    
+    return 0
+}
+
+# Рекурсивная функция обхода каталогов
+process_directory() {
+    local src_dir="$1"
+    local dst_dir="$2"
+    
+    log_message "INFO" "Обрабатывается каталог: $src_dir"
+    
+    # Создаем целевой каталог
+    copy_with_logging "$src_dir" "$dst_dir"
+    
+    # Обрабатываем содержимое каталога
+    while IFS= read -r -d '' item; do
+        local rel_path="${item#$src_dir/}"
+        local dst_path="$dst_dir/$rel_path"
+        
+        if [[ -d "$item" ]]; then
+            process_directory "$item" "$dst_path"
+        else
+            copy_with_logging "$item" "$dst_path"
+        fi
+        
+        ((TOTAL_ITEMS++))
+        
+        # Показываем прогресс каждые 100 файлов
+        if (( TOTAL_ITEMS % 100 == 0 )); then
+            log_message "INFO" "Обработано элементов: $TOTAL_ITEMS"
+        fi
+        
+    done < <(find "$src_dir" -mindepth 1 -print0)
+}
+
+# Проверка аргументов
+if [[ $# -lt 2 ]]; then
+    echo "Ошибка: недостаточно аргументов"
+    show_help
+fi
+
+# Инициализация переменных
+SOURCE_DIR="$1"
+TARGET_DIR="$2"
+LOG_FILE="${3:-copy_log_$(date '+%Y-%m-%d_%H-%M-%S').log}"
+
+# Счетчики
+TOTAL_ITEMS=0
+COPIED_FILES=0
+ERROR_COUNT=0
+WARNING_COUNT=0
+
+# Проверка исходного каталога
+if [[ ! -d "$SOURCE_DIR" ]]; then
+    echo "Ошибка: исходный каталог не существует: $SOURCE_DIR"
+    exit 1
+fi
+
+# Преобразуем пути в абсолютные
+SOURCE_DIR=$(readlink -f "$SOURCE_DIR")
+TARGET_DIR=$(readlink -f "$TARGET_DIR")
+
+# Проверяем, что назначение не находится внутри источника
+if [[ "$TARGET_DIR" == "$SOURCE_DIR"* ]]; then
+    echo "Ошибка: целевой каталог не может находиться внутри исходного каталога"
+    exit 1
+fi
+
+# Создаем лог-файл
+touch "$LOG_FILE" || {
+    echo "Ошибка: не удалось создать лог-файл: $LOG_FILE"
+    exit 1
+}
+
+# Начинаем копирование
+START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+log_message "INFO" "==================== НАЧАЛО КОПИРОВАНИЯ ===================="
+log_message "INFO" "Исходный каталог: $SOURCE_DIR"
+log_message "INFO" "Целевой каталог: $TARGET_DIR"
+log_message "INFO" "Лог-файл: $LOG_FILE"
+log_message "INFO" "Время начала: $START_TIME"
+
+# Выполняем копирование
+process_directory "$SOURCE_DIR" "$TARGET_DIR"
+
+# Завершение
+END_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+log_message "INFO" "==================== ЗАВЕРШЕНИЕ КОПИРОВАНИЯ ===================="
+log_message "INFO" "Время завершения: $END_TIME"
+log_message "INFO" "Всего обработано элементов: $TOTAL_ITEMS"
+log_message "INFO" "Успешно скопировано файлов: $COPIED_FILES"
+
+if [[ $WARNING_COUNT -gt 0 ]]; then
+    log_message "WARNING" "Предупреждений: $WARNING_COUNT"
+fi
+
+if [[ $ERROR_COUNT -gt 0 ]]; then
+    log_message "ERROR" "Ошибок: $ERROR_COUNT"
+    echo "Копирование завершено с ошибками. Проверьте лог-файл: $LOG_FILE"
+    exit 1
+else
+    log_message "SUCCESS" "Копирование успешно завершено!"
+    echo "Копирование успешно завершено. Подробности в лог-файле: $LOG_FILE"
+fi
