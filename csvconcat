@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# Скрипт для конкатенации CSV-файлов с символами новой строки Windows (CRLF)
+# Использование: ./concat_csv_windows.sh output.csv input1.csv input2.csv ...
+# или: ./concat_csv_windows.sh output.csv *.csv
+
+# Проверка аргументов
+if [ $# -lt 2 ]; then
+    echo "Использование: $0 <выходной_файл> <входной_файл1> [входной_файл2] ..."
+    echo "Пример: $0 result.csv file1.csv file2.csv file3.csv"
+    echo "Пример: $0 result.csv *.csv"
+    exit 1
+fi
+
+# Получение имени выходного файла
+output_file="$1"
+shift
+
+# Удаление выходного файла, если он существует
+if [ -f "$output_file" ]; then
+    rm "$output_file"
+    echo "Удален существующий файл: $output_file"
+fi
+
+# Проверка существования входных файлов
+file_count=0
+for file in "$@"; do
+    if [ -f "$file" ]; then
+        ((file_count++))
+    else
+        echo "Предупреждение: файл '$file' не найден, пропускаем"
+    fi
+done
+
+if [ $file_count -eq 0 ]; then
+    echo "Ошибка: не найдено ни одного входного CSV-файла"
+    exit 1
+fi
+
+echo "Начинаем конкатенацию $file_count файлов..."
+
+# Конкатенация файлов
+for file in "$@"; do
+    if [ -f "$file" ]; then
+        echo "Обрабатываем: $file"
+        
+        # Читаем файл и добавляем к выходному файлу с Windows CRLF
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Удаляем существующие символы возврата каретки, если есть
+            line="${line%$'\r'}"
+            # Добавляем строку с Windows CRLF (\r\n)
+            printf "%s\r\n" "$line" >> "$output_file"
+        done < "$file"
+        
+        # Добавляем дополнительную пустую строку между файлами (опционально)
+        # printf "\r\n" >> "$output_file"
+    fi
+done
+
+echo "Конкатенация завершена. Результат сохранен в: $output_file"
+
+# Показываем статистику
+if [ -f "$output_file" ]; then
+    line_count=$(wc -l < "$output_file" 2>/dev/null || echo "0")
+    file_size=$(ls -lh "$output_file" 2>/dev/null | awk '{print $5}' || echo "неизвестно")
+    echo "Статистика:"
+    echo "  Строк: $line_count"
+    echo "  Размер файла: $file_size"
+fi
