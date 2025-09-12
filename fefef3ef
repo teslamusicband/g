@@ -1,0 +1,28 @@
+## Однострочные команды для быстрой проверки
+
+### Проверка каждые 10 секунд
+```bash
+while true; do stat -c "$(date '+%Y-%m-%d %H:%M:%S'): mtime=%y size=%s" /root/rsync2.log 2>/dev/null || echo "$(date): файл не существует"; sleep 10; done
+```
+
+### Проверка каждые 5 секунд
+```bash
+while true; do echo "$(date): $(stat -c 'изменен %y, размер %s байт' /root/rsync2.log 2>/dev/null || echo 'файл отсутствует')"; sleep 5; done
+```
+
+### Отслеживание только изменений (без повторов)
+```bash
+f="/root/rsync2.log"; t=""; while true; do n=$(stat -c %Y "$f" 2>/dev/null); [ "$t" != "$n" ] && [ -n "$n" ] && echo "$(date): файл изменен $(date -d @$n)" && t="$n"; sleep 3; done
+```
+
+### С использованием inotifywait (если установлен)
+```bash
+inotifywait -m -e modify /root/rsync2.log --format '%T файл изменен' --timefmt '%Y-%m-%d %H:%M:%S'
+```
+
+### Для проверки "прямо сейчас"
+```bash
+stat -c "Файл: %n | Изменен: %y | Размер: %s байт" /root/rsync2.log
+```
+
+Самая практичная - третья команда, так как выводит сообщение только при реальных изменениях файла.
