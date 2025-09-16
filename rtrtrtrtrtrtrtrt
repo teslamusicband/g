@@ -1,0 +1,672 @@
+# Disaster Recovery Guide: Восстановление кластеров с нуля
+
+## 1. ClickHouse Cluster Recovery
+
+### Предварительная оценка
+```bash
+# Проверка доступности backup'ов
+ls -la /backup/clickhouse/
+# Проверка состояния дисков
+lsblk
+fdisk -l
+```
+
+### Пошаговое восстановление
+
+#### Шаг 1: Подготовка инфраструктуры
+```bash
+# Установка ClickHouse на всех узлах
+curl https://clickhouse.com/ | sh
+sudo ./clickhouse install
+
+# Подготовка конфигурации
+mkdir -p /etc/clickhouse-server/config.d/
+mkdir -p /var/lib/clickhouse/
+chown clickhouse:clickhouse /var/lib/clickhouse/
+```
+
+#### Шаг 2: Настройка кластера
+```xml
+<!-- /etc/clickhouse-server/config.d/cluster.xml -->
+<yandex>
+    <remote_servers>
+        <production_cluster>
+            <shard>
+                <replica>
+                    <host>ch-node1</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>ch-node2</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+            <shard>
+                <replica>
+                    <host>ch-node3</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>ch-node4</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </production_cluster>
+    </remote_servers>
+    
+    <zookeeper>
+        <node index="1">
+            <host>zk1</host>
+            <port>2181</port>
+        </node>
+        <node index="2">
+            <host>zk2</host>
+            <port>2181</port>
+        </node>
+        <node index="3">
+            <host>zk3</host>
+            <port>2181</port>
+        </node>
+    </zookeeper>
+</yandex>
+```
+
+#### Шаг 3: Восстановление данных
+
+**Вариант A: Из backup'а**
+```bash
+# Остановка всех узлов
+systemctl stop clickhouse-server
+
+# Восстановление данных
+sudo -u clickhouse clickhouse-backup restore latest_backup
+
+# Запуск по одному узлу
+systemctl start clickhouse-server
+```
+
+**Вариант B: Пересоздание ReplicatedMergeTree таблиц**
+```sql
+-- На первом узле каждого шарда
+CREATE DATABASE IF NOT EXISTS production;
+
+-- Пересоздание таблиц с правильной структурой
+CREATE TABLE production.events (
+    timestamp DateTime,
+    user_id UInt64,
+    event_type String
+) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/events', '{replica}')
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (user_id, timestamp);
+```
+
+#### Шаг 4: Проверка целостности
+```sql
+-- Проверка статуса репликации
+SELECT * FROM system.replicas WHERE database = 'production';
+
+-- Проверка количества данных
+SELECT 
+    table, 
+    sum(rows) as total_rows,
+    sum(bytes_on_disk) as total_size
+FROM system.parts 
+WHERE database = 'production' 
+GROUP BY table;
+
+-- Проверка lag репликации
+SELECT 
+    database, 
+    table, 
+    replica_name,
+    absolute_delay
+FROM system.replicas 
+WHERE absolute_delay > 0;
+```
+
+---
+
+## 2. Patroni (PostgreSQL) Cluster Recovery
+
+### Предварительная оценка
+```bash
+# Проверка backup'ов
+ls -la /backup/postgresql/
+pg_basebackup --version
+
+# Проверка состояния файловой системы
+df -h /var/lib/postgresql/
+```
+
+### Пошаговое восстановление
+
+#### Шаг 1: Установка и настройка Patroni
+```bash
+# Установка PostgreSQL и Patroni
+apt-get update
+apt-get install -y postgresql-14 postgresql-contrib-14
+pip3 install patroni[etcd] psycopg2-binary
+
+# Создание пользователя
+useradd -m postgres
+```
+
+#### Шаг 2: Конфигурация Patroni
+```yaml
+# /etc/patroni/patroni.yml
+scope: postgres-cluster
+name: postgres-node1
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: postgres-node1:8008
+
+etcd:
+  hosts: etcd1:2379,etcd2:2379,etcd3:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 30
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      parameters:
+        max_connections: 200
+        max_wal_senders: 10
+        wal_level: hot_standby
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: postgres-node1:5432
+  data_dir: /var/lib/postgresql/14/main
+  bin_dir: /usr/lib/postgresql/14/bin
+  authentication:
+    replication:
+      username: replicator
+      password: repl_password
+    superuser:
+      username: postgres
+      password: postgres_password
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+```
+
+#### Шаг 3: Восстановление данных
+
+**Сценарий A: Восстановление из backup'а**
+```bash
+# На одном узле (будущий мастер)
+systemctl stop patroni
+
+# Очистка старых данных
+rm -rf /var/lib/postgresql/14/main/*
+
+# Восстановление базового backup'а
+sudo -u postgres pg_basebackup \
+    -h backup-server \
+    -D /var/lib/postgresql/14/main \
+    -U postgres -v -P -W
+
+# Применение WAL logs для point-in-time recovery
+sudo -u postgres postgres -D /var/lib/postgresql/14/main &
+sudo -u postgres pg_ctl stop -D /var/lib/postgresql/14/main
+
+# Запуск первого узла
+systemctl start patroni
+```
+
+**Сценарий B: Полная инициализация**
+```bash
+# На первом узле
+systemctl start patroni
+
+# Patroni автоматически инициализирует новый кластер
+# Проверка статуса
+patronictl -c /etc/patroni/patroni.yml list
+```
+
+#### Шаг 4: Добавление остальных узлов
+```bash
+# На остальных узлах по очереди
+systemctl start patroni
+
+# Проверка репликации
+patronictl -c /etc/patroni/patroni.yml list
+```
+
+#### Шаг 5: Проверка целостности данных
+```sql
+-- Проверка репликации
+SELECT client_addr, state, sync_state 
+FROM pg_stat_replication;
+
+-- Проверка lag'а
+SELECT 
+    client_addr,
+    pg_wal_lsn_diff(pg_current_wal_lsn(), flush_lsn) AS flush_lag,
+    pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS replay_lag
+FROM pg_stat_replication;
+
+-- Проверка размера баз данных
+SELECT datname, pg_size_pretty(pg_database_size(datname)) 
+FROM pg_database 
+WHERE datistemplate = false;
+```
+
+---
+
+## 3. Kubernetes Cluster Recovery
+
+### Предварительная оценка
+```bash
+# Проверка состояния узлов
+ping k8s-master1
+ping k8s-worker1
+
+# Проверка backup'ов etcd
+ls -la /backup/etcd/
+```
+
+### Пошаговое восстановление
+
+#### Шаг 1: Восстановление Control Plane
+
+**Master Node 1:**
+```bash
+# Остановка существующих сервисов
+systemctl stop kubelet
+systemctl stop docker
+
+# Очистка старых данных
+rm -rf /var/lib/etcd/
+rm -rf /etc/kubernetes/
+
+# Восстановление etcd из backup'а
+etcdctl snapshot restore /backup/etcd/snapshot.db \
+    --data-dir /var/lib/etcd \
+    --initial-cluster-token etcd-cluster-1 \
+    --initial-advertise-peer-urls http://k8s-master1:2380
+
+# Инициализация кластера
+kubeadm init --control-plane-endpoint "k8s-cluster:6443" \
+    --upload-certs \
+    --pod-network-cidr=10.244.0.0/16
+```
+
+#### Шаг 2: Настройка сети
+```bash
+# Установка CNI (например, Flannel)
+kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+
+# Или Calico
+kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+```
+
+#### Шаг 3: Добавление Control Plane узлов
+```bash
+# На остальных master узлах
+kubeadm join k8s-cluster:6443 \
+    --token <token> \
+    --discovery-token-ca-cert-hash sha256:<hash> \
+    --control-plane \
+    --certificate-key <cert-key>
+```
+
+#### Шаг 4: Добавление Worker узлов
+```bash
+# На worker узлах
+kubeadm join k8s-cluster:6443 \
+    --token <token> \
+    --discovery-token-ca-cert-hash sha256:<hash>
+```
+
+#### Шаг 5: Восстановление приложений
+```bash
+# Восстановление из backup'ов манифестов
+kubectl apply -f /backup/k8s-manifests/
+
+# Проверка Persistent Volumes
+kubectl get pv
+kubectl get pvc --all-namespaces
+
+# Восстановление данных в PV при необходимости
+```
+
+#### Шаг 6: Проверка работоспособности
+```bash
+# Проверка узлов
+kubectl get nodes -o wide
+
+# Проверка компонентов
+kubectl get componentstatuses
+
+# Проверка подов
+kubectl get pods --all-namespaces
+
+# Проверка событий
+kubectl get events --all-namespaces --sort-by='.lastTimestamp'
+```
+
+---
+
+## 4. Kafka Cluster Recovery (KRaft Mode)
+
+### Предварительная оценка
+```bash
+# Проверка backup'ов
+ls -la /backup/kafka/
+ls -la /var/kafka-logs/
+
+# Проверка метаданных KRaft
+ls -la /var/kafka-logs/__cluster_metadata*
+
+# Проверка cluster.id
+cat /var/kafka-logs/meta.properties
+```
+
+### Пошаговое восстановление KRaft
+
+#### Шаг 1: Подготовка новых Controller узлов
+```bash
+# Остановка всех Kafka брокеров/контроллеров
+systemctl stop kafka
+
+# Генерация нового cluster UUID (только если полная потеря)
+kafka-storage random-uuid
+# Сохраните этот UUID: например, 4L6g3nShT-eMCtK--X86sw
+```
+
+#### Шаг 2: Конфигурация KRaft Controller
+```properties
+# /opt/kafka/config/kraft/controller.properties
+process.roles=controller
+node.id=1  # Уникальный для каждого контроллера (1,2,3)
+controller.quorum.voters=1@controller1:9093,2@controller2:9093,3@controller3:9093
+
+listeners=CONTROLLER://controller1:9093
+inter.broker.listener.name=CONTROLLER
+controller.listener.names=CONTROLLER
+
+# Хранилище метаданных
+log.dirs=/var/kafka-logs
+
+# Настройки для восстановления
+num.network.threads=8
+num.io.threads=16
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+
+# Репликация метаданных
+metadata.log.segment.bytes=1073741824
+metadata.log.retention.bytes=1073741824
+```
+
+#### Шаг 3: Форматирование кластера
+
+**Сценарий A: Полная потеря - создание нового кластера**
+```bash
+# На всех controller узлах с одним и тем же cluster.id
+kafka-storage format -t 4L6g3nShT-eMCtK--X86sw \
+    -c /opt/kafka/config/kraft/controller.properties
+
+# Проверка форматирования
+ls -la /var/kafka-logs/
+cat /var/kafka-logs/meta.properties
+```
+
+**Сценарий B: Частичное восстановление с сохранением данных**
+```bash
+# Если /var/kafka-logs частично сохранились
+# Проверка существующего cluster.id
+CLUSTER_ID=$(cat /var/kafka-logs/meta.properties | grep cluster.id | cut -d'=' -f2)
+
+# Если cluster.id есть, но метаданные повреждены
+kafka-storage format -t $CLUSTER_ID \
+    -c /opt/kafka/config/kraft/controller.properties \
+    --ignore-formatted
+```
+
+#### Шаг 4: Запуск Controller узлов
+```bash
+# Запуск первого контроллера
+systemctl start kafka
+
+# Проверка логов
+tail -f /var/log/kafka/controller.log
+
+# Ожидание выбора лидера, затем запуск остальных
+# На controller2 и controller3:
+systemctl start kafka
+```
+
+#### Шаг 5: Настройка Broker узлов
+```properties
+# /opt/kafka/config/kraft/broker.properties
+process.roles=broker
+node.id=10  # Уникальный ID для брокера (10,11,12,13,14)
+controller.quorum.voters=1@controller1:9093,2@controller2:9093,3@controller3:9093
+
+listeners=PLAINTEXT://broker1:9092
+advertised.listeners=PLAINTEXT://broker1:9092
+inter.broker.listener.name=PLAINTEXT
+
+log.dirs=/var/kafka-logs
+
+# Настройки брокера
+num.network.threads=8
+num.io.threads=16
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+
+# Репликация
+default.replication.factor=3
+min.insync.replicas=2
+num.partitions=3
+
+# Очистка логов
+log.retention.hours=168
+log.segment.bytes=1073741824
+log.retention.check.interval.ms=300000
+```
+
+#### Шаг 6: Форматирование и запуск Broker узлов
+```bash
+# Форматирование брокеров с тем же cluster.id
+kafka-storage format -t 4L6g3nShT-eMCtK--X86sw \
+    -c /opt/kafka/config/kraft/broker.properties
+
+# Запуск брокеров по одному
+systemctl start kafka
+
+# Проверка подключения к контроллерам
+tail -f /var/log/kafka/server.log | grep -i controller
+```
+
+#### Шаг 7: Проверка кластера KRaft
+
+```bash
+# Проверка состояния кластера
+kafka-cluster cluster-id --bootstrap-server localhost:9092
+
+# Проверка узлов в кластере
+kafka-broker-api-versions --bootstrap-server localhost:9092
+
+# Проверка метаданных
+kafka-metadata --bootstrap-server localhost:9092 \
+    --entity-type brokers --describe
+
+# Проверка controller'ов
+kafka-metadata --bootstrap-server localhost:9092 \
+    --entity-type controller --describe
+```
+
+#### Шаг 8: Восстановление топиков и данных
+
+**Сценарий A: Восстановление топиков из backup'а**
+```bash
+# Создание топиков с правильными настройками
+kafka-topics --bootstrap-server localhost:9092 \
+    --create --topic orders \
+    --partitions 6 --replication-factor 3 \
+    --config min.insync.replicas=2 \
+    --config retention.ms=604800000
+
+kafka-topics --bootstrap-server localhost:9092 \
+    --create --topic events \
+    --partitions 12 --replication-factor 3 \
+    --config min.insync.replicas=2 \
+    --config retention.ms=259200000
+
+# Список всех топиков для проверки
+kafka-topics --bootstrap-server localhost:9092 --list
+```
+
+**Сценарий B: Восстановление данных**
+```bash
+# Примечание: Прямое восстановление данных Kafka из backup'ов
+# крайне сложно. Рекомендуется:
+
+# 1. Уведомить приложения о необходимости replay данных
+# 2. Настроить Producer'ы на повторную отправку с источников
+# 3. Использовать Consumer Groups с earliest offset'ом
+
+# Сброс offset'ов для критичных consumer groups
+kafka-consumer-groups --bootstrap-server localhost:9092 \
+    --group critical-processor \
+    --reset-offsets --to-earliest \
+    --topic orders --execute
+```
+
+#### Шаг 9: Проверка работоспособности KRaft кластера
+```bash
+# Тестирование Producer/Consumer
+# Producer тест
+echo "test message $(date)" | kafka-console-producer \
+    --bootstrap-server localhost:9092 \
+    --topic test-recovery
+
+# Consumer тест
+kafka-console-consumer \
+    --bootstrap-server localhost:9092 \
+    --topic test-recovery \
+    --from-beginning --max-messages 1
+
+# Проверка throughput
+kafka-producer-perf-test \
+    --topic test-recovery \
+    --num-records 10000 \
+    --record-size 1024 \
+    --throughput 1000 \
+    --producer-props bootstrap.servers=localhost:9092
+
+# Мониторинг метрик KRaft
+kafka-run-class kafka.tools.JmxTool \
+    --object-name kafka.controller:type=ControllerStats,name=ActiveControllerCount \
+    --jmx-url service:jmx:rmi:///jndi/rmi://localhost:9999/jmxrmi
+
+# Проверка election стабильности
+kafka-run-class kafka.tools.JmxTool \
+    --object-name kafka.controller:type=ControllerStats,name=LeaderElectionRateAndTimeMs \
+    --jmx-url service:jmx:rmi:///jndi/rmi://localhost:9999/jmxrmi
+```
+
+#### Шаг 10: Проблемы и решения KRaft
+
+**Split-Brain в контроллерах:**
+```bash
+# Проверка активного контроллера
+kafka-metadata --bootstrap-server localhost:9092 \
+    --entity-type controller --describe
+
+# Если множественные активные контроллеры:
+# 1. Остановить все контроллеры
+# 2. Очистить __cluster_metadata на всех узлах
+# 3. Переформатировать с новым cluster.id
+# 4. Запустить по одному
+```
+
+**Потеря метаданных:**
+```bash
+# Создание checkpoint'а метаданных
+kafka-dump-log --files /var/kafka-logs/__cluster_metadata-0/00000000000000000000.log \
+    --print-data-log > /backup/metadata-dump.txt
+
+# Восстановление метаданных топиков
+# (требует manual recovery из backup'ов приложений)
+```
+
+### Особенности KRaft Recovery
+
+#### Преимущества KRaft над Zookeeper:
+- **Упрощенная архитектура** - нет внешней зависимости от ZK
+- **Быстрее восстановление** - меньше компонентов для восстановления
+- **Встроенные метаданные** - все в Kafka logs
+
+#### Недостатки при восстановлении:
+- **Новая технология** - меньше опыта disaster recovery
+- **Меньше инструментов** для восстановления метаданных
+- **Критичность cluster.id** - потеря означает полную перестройку
+
+#### KRaft-специфические проверки:
+```bash
+# Проверка voter узлов
+grep "controller.quorum.voters" /opt/kafka/config/kraft/*.properties
+
+# Проверка process.roles
+grep "process.roles" /opt/kafka/config/kraft/*.properties
+
+# Мониторинг метаданных
+ls -la /var/kafka-logs/__cluster_metadata*
+
+# Проверка bootstrap завершения
+grep "Transitioning from RECOVERY to RUNNING" /var/log/kafka/controller.log
+```
+
+---
+
+## General Best Practices
+
+### Мониторинг процесса восстановления
+1. **Ведите подробные логи** всех действий
+2. **Документируйте** каждый шаг и его результат
+3. **Проверяйте** целостность данных на каждом этапе
+4. **Тестируйте** критически важные функции
+
+### Приоритизация восстановления (обновлено для KRaft)
+1. **Первый приоритет:** etcd (координация K8s)
+2. **Второй приоритет:** PostgreSQL (критические данные)
+3. **Третий приоритет:** Kubernetes (платформа приложений)
+4. **Четвертый приоритет:** Kafka KRaft (стриминг данных)
+5. **Пятый приоритет:** ClickHouse (аналитика)
+
+### Проверка после восстановления
+```bash
+# Создайте checklist для каждого сервиса:
+# ✓ Все узлы online
+# ✓ Репликация работает
+# ✓ Backup'ы настроены заново
+# ✓ Мониторинг восстановлен
+# ✓ Приложения могут подключаться
+# ✓ Производительность в норме
+```
+
+### Потенциальные потери данных (обновлено)
+- **ClickHouse:** Данные между последним backup'ом и сбоем
+- **PostgreSQL:** WAL logs, которые не успели реплицироваться
+- **Kafka KRaft:** Сообщения в памяти брокеров, неподтвержденные offset'ы, метаданные топиков при потере cluster.id
+- **Kubernetes:** Состояние приложений, временные данные в emptyDir
+
+### Минимизация потерь в будущем
+1. **Автоматические backup'ы** каждые 15-30 минут
+2. **Cross-region репликация** критических данных
+3. **Мониторинг** состояния кластеров 24/7
+4. **Regular disaster recovery drills**
+5. **Документирование** всех процедур и их регулярное обновление
