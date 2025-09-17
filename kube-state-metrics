@@ -1,0 +1,56 @@
+https://github.com/kubernetes/kube-state-metrics
+### 1. kube-state-metrics
+```yaml
+# Метрики состояния K8s объектов
+kube_node_status_condition{condition="Ready",status="true"} # Готовность ноды
+kube_node_spec_unschedulable # Cordoned ли нода
+kube_node_status_condition{condition="DiskPressure"} # Проблемы с диском
+kube_node_status_condition{condition="MemoryPressure"} # Проблемы с памятью
+```
+
+
+## Примеры алертов
+
+### Prometheus AlertManager правила:
+
+```yaml
+groups:
+- name: kubernetes-nodes
+  rules:
+  - alert: NodeNotReady
+    expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Kubernetes node is not ready"
+      description: "Node {{ $labels.node }} has been NotReady for more than 5 minutes"
+
+  - alert: NodeHighMemoryUsage
+    expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High memory usage on node"
+      description: "Node {{ $labels.instance }} memory usage is above 90%"
+
+  - alert: KubeletDown
+    expr: node_systemd_unit_state{name="kubelet.service",state="active"} == 0
+    for: 3m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Kubelet is down"
+      description: "Kubelet on node {{ $labels.instance }} is not running"
+```
+
+## Установка компонентов
+
+Если используете Helm:
+```bash
+# kube-state-metrics
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install kube-state-metrics prometheus-community/kube-state-metrics
+
+```
