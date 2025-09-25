@@ -1,0 +1,90 @@
+Проблема в том, что etcd слушает на IPv6, но пытается подключиться по IPv4. Вот решения:
+
+## 1. Проверить текущие настройки etcd
+```bash
+ss -tlnp | grep 2380
+netstat -tlnp | grep 2380
+```
+
+## 2. Настроить etcd на использование IPv4
+В конфигурации etcd укажите явно IPv4 адреса:
+
+### Вариант A: через environment variables
+```bash
+# В systemd unit файле добавьте:
+Environment="ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379"
+Environment="ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380"
+Environment="ETCD_ADVERTISE_CLIENT_URLS=http://your-ipv4-address:2379"
+Environment="ETCD_INITIAL_ADVERTISE_PEER_URLS=http://your-ipv4-address:2380"
+```
+
+### Вариант B: в конфигурационном файле etcd
+```yaml
+# /etc/etcd/etcd.conf
+listen-client-urls: http://0.0.0.0:2379
+listen-peer-urls: http://0.0.0.0:2380
+advertise-client-urls: http://your-ipv4-address:2379
+initial-advertise-peer-urls: http://your-ipv4-address:2380
+```
+
+## 3. Пример полного systemd unit файла
+```ini
+[Unit]
+Description=etcd key-value store
+Documentation=https://etcd.io/docs
+
+[Service]
+Type=notify
+Environment=ETCD_DATA_DIR=/var/lib/etcd
+Environment=ETCD_NAME=default
+Environment=ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+Environment=ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+Environment=ETCD_INITIAL_ADVERTISE_PEER_URLS=http://ваш-ipv4-адрес:2380
+Environment=ETCD_ADVERTISE_CLIENT_URLS=http://ваш-ipv4-адрес:2379
+Environment=ETCD_INITIAL_CLUSTER=default=http://ваш-ipv4-адрес:2380
+ExecStart=/usr/bin/etcd
+Restart=always
+RestartSec=5
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## 4. Принудительно отключить IPv6 (если не нужен)
+```bash
+# Временно отключить IPv6
+sysctl -w net.ipv6.conf.all.disable_ipv6=1
+sysctl -w net.ipv6.conf.default.disable_ipv6=1
+
+# Постоянно отключить - добавить в /etc/sysctl.conf
+echo 'net.ipv6.conf.all.disable_ipv6=1' >> /etc/sysctl.conf
+echo 'net.ipv6.conf.default.disable_ipv6=1' >> /etc/sysctl.conf
+sysctl -p
+```
+
+## 5. Проверить сетевые настройки
+```bash
+# Убедиться, что IPv4 адрес настроен правильно
+ip addr show
+
+# Проверить, что порт слушается на IPv4
+netstat -tulpn | grep 2380
+```
+
+## 6. Для кластера etcd
+Если у вас кластер, убедитесь, что все ноды используют одинаковую IP версию:
+
+```ini
+# На всех нодах кластера
+Environment="ETCD_INITIAL_CLUSTER=node1=http://ipv4-node1:2380,node2=http://ipv4-node2:2380,node3=http://ipv4-node3:2380"
+```
+
+## 7. Перезапустить etcd
+```bash
+systemctl daemon-reload
+systemctl restart etcd
+systemctl status etcd
+```
+
+**Рекомендую начать с варианта 2A** - явно указать IPv4 адреса в environment variables systemd юнита. Это наиболее надежное решение.
