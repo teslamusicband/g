@@ -1,0 +1,74 @@
+Для переноса 11GB ISO файла частями по 300MB через tar архивы, вот пошаговое решение:
+
+## 1. Создание многотомного tar архива
+
+```bash
+# Создание архива с разделением на части по 300MB
+tar -cvf - your_file.iso | split -b 300m - archive_part_
+
+# Или альтернативный способ:
+split -b 300m your_file.iso archive_part_
+```
+
+Это создаст файлы: `archive_part_aa`, `archive_part_ab`, `archive_part_ac`, и т.д.
+
+## 2. Проверка созданных частей
+
+```bash
+# Посмотреть список созданных частей
+ls -lh archive_part_*
+
+# Проверить общий размер
+du -sh archive_part_*
+```
+
+## 3. Перенос файлов
+
+Скопируйте все части `archive_part_*` в целевое место (USB, сеть, etc.)
+
+## 4. Восстановление файла в другом месте
+
+```bash
+# Конкатенация и извлечение
+cat archive_part_* > restored_file.iso
+
+# Или если использовали tar:
+cat archive_part_* | tar -xvf -
+```
+
+## 5. Проверка целостности
+
+```bash
+# Сравнить размеры
+ls -lh your_file.iso restored_file.iso
+
+# Или проверить контрольные суммы
+md5sum your_file.iso
+md5sum restored_file.iso
+```
+
+## Альтернативный способ с tar и gzip сжатием:
+
+```bash
+# Создание сжатого архива по частям
+tar -czf - your_file.iso | split -b 300m - archive_part_
+
+# Восстановление
+cat archive_part_* | tar -xzf -
+```
+
+## Автоматизированный скрипт для создания:
+
+```bash
+#!/bin/bash
+FILE="your_file.iso"
+SIZE="300m"
+PREFIX="archive_part_"
+
+echo "Создание многотомного архива..."
+split -b $SIZE "$FILE" "$PREFIX"
+echo "Создано частей: $(ls ${PREFIX}* | wc -l)"
+echo "Проверьте файлы: ls -lh ${PREFIX}*"
+```
+
+Этот метод гарантирует, что ваш 11GB ISO файл будет разделен на части примерно по 300MB каждая, которые можно легко перенести и затем восстановить в исходный файл.
