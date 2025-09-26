@@ -1,0 +1,161 @@
+Для корректной настройки chrony на серверах с etcd в локальной сети с внешним NTP-сервером, рекомендую следующую конфигурацию:
+
+## 1. Общая схема синхронизации времени
+
+```
+Удалённый NTP-сервер → Основной хроносигнал → Все серверы etcd
+```
+
+## 2. Настройка chrony на всех серверах
+
+### Установка и базовая настройка (все серверы):
+
+```bash
+# Установка chrony (если не установлен)
+sudo dnf install -y chrony
+
+# Включение автозапуска
+sudo systemctl enable chrony
+sudo systemctl start chrony
+```
+
+### Конфигурация `/etc/chrony.conf`
+
+#### Для основного сервера etcd (который будет синхронизироваться с удалённым NTP):
+
+```bash
+# /etc/chrony.conf на основном сервере
+pool удаленный-ntp-сервер iburst maxsources 2
+# Пример:
+# pool time.google.com iburst maxsources 2
+# или
+# pool 0.pool.ntp.org iburst maxsources 2
+
+# Локальная синхронизация (для других серверов etcd)
+local stratum 10
+allow 192.168.1.0/24  # Укажите вашу подсеть
+
+# Базовые настройки
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+logdir /var/log/chrony
+```
+
+#### Для остальных серверов etcd (которые синхронизируются с основным):
+
+```bash
+# /etc/chrony.conf на второстепенных серверах
+server основной-сервер-etcd-ip iburst
+# Пример:
+# server 192.168.1.10 iburst
+
+# Дополнительный сервер на случай недоступности основного
+server второй-сервер-etcd-ip iburst
+
+# Базовые настройки
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+logdir /var/log/chrony
+```
+
+## 3. Пример полной конфигурации
+
+### Сервер etcd1 (192.168.1.10) - основной:
+```bash
+# /etc/chrony.conf
+pool time.google.com iburst maxsources 2
+local stratum 10
+allow 192.168.1.0/24
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+logdir /var/log/chrony
+```
+
+### Сервер etcd2 (192.168.1.11):
+```bash
+# /etc/chrony.conf
+server 192.168.1.10 iburst
+server 192.168.1.12 iburst
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+logdir /var/log/chrony
+```
+
+### Сервер etcd3 (192.168.1.12):
+```bash
+# /etc/chrony.conf
+server 192.168.1.10 iburst
+server 192.168.1.11 iburst
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+logdir /var/log/chrony
+```
+
+## 4. Настройка firewall (если включен)
+
+```bash
+# Разрешить NTP трафик (порт 123)
+sudo firewall-cmd --add-service=ntp --permanent
+sudo firewall-cmd --reload
+```
+
+## 5. Применение конфигурации
+
+После изменения конфигурации на всех серверах:
+
+```bash
+# Перезагрузка chrony
+sudo systemctl restart chrony
+
+# Проверка статуса
+sudo systemctl status chrony
+
+# Проверка синхронизации
+chronyc sources -v
+chronyc tracking
+```
+
+## 6. Проверка корректности настройки
+
+### Проверка источников времени:
+```bash
+chronyc sources -v
+```
+Должны видеть правильные источники с отметками `^*` (текущий источник).
+
+### Проверка точности синхронизации:
+```bash
+chronyc tracking
+```
+Обратите внимание на строку `Last offset` - должно быть небольшое значение (в миллисекундах).
+
+### Проверка NTP-доступности между серверами:
+```bash
+# С другого сервера etcd проверить доступность основного
+chronyc -h основной-сервер activity
+```
+
+## 7. Особенности для etcd кластера
+
+Для etcd критически важна синхронизация времени:
+
+1. **Расхождение времени** между серверами не должно превышать **1 секунду**
+2. Рекомендуется использовать **однородную конфигурацию** NTP на всех узлах
+3. Регулярно мониторьте расхождение времени:
+```bash
+# Проверить расхождение между серверами
+chronyc sourcestats
+```
+
+## 8. Дополнительные рекомендации
+
+- Используйте минимум 2-3 внешних NTP-сервера для надежности
+- Настройте мониторинг расхождения времени (например, через Prometheus)
+- Регулярно проверяйте логи chrony: `/var/log/chrony/chrony.log`
+
+Такая конфигурация обеспечит стабильную синхронизацию времени, что критически важно для работы etcd кластера.
