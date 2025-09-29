@@ -1,0 +1,212 @@
+#!/bin/bash
+
+# Set noninteractive frontend
+export DEBIAN_FRONTEND=noninteractive
+
+# Проверка наличия root прав
+if [ "$EUID" -ne 0 ]; then
+    echo "Пожалуйста, запустите скрипт с правами root"
+    exit 1
+fi
+
+# Функция для проверки успешности выполнения команд
+check_status() {
+    if [ $? -ne 0 ]; then
+        echo "Ошибка: $1"
+        exit 1
+    fi
+}
+
+# Определение имени сетевого интерфейса
+IFACE=$(ip -o -4 route show to default | awk '{print $5}')
+if [ -z "$IFACE" ]; then
+    echo "Не удалось определить сетевой интерфейс"
+    exit 1
+fi
+
+# Установка необходимых пакетов
+DEBIAN_FRONTEND=noninteractive apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y bind9 bind9utils bind9-doc net-tools dnsutils
+check_status "установка пакетов"
+
+# Настройка сетевого интерфейса
+cat > /etc/netplan/00-installer-config.yaml << EOL
+network:
+  version: 2
+  ethernets:
+    ${IFACE}:
+      addresses:
+        - 192.168.0.10/24
+      routes:
+        - to: default
+          via: 192.168.0.2
+      nameservers:
+        addresses: [127.0.0.1, 8.8.8.8]
+		search: [mysubdomain.mycompany.com]
+EOL
+
+# Установка корректных прав для netplan
+chmod 600 /etc/netplan/00-installer-config.yaml
+check_status "установка прав для netplan"
+
+# Применение сетевых настроек
+netplan generate
+netplan apply
+
+# Отключение IPv6
+cat >> /etc/sysctl.conf << EOL
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+EOL
+sysctl -p
+
+# Конфигурация named.conf.options
+cat > /etc/bind/named.conf.options << EOL
+options {
+    directory "/var/cache/bind";
+    forwarders {
+        8.8.8.8;
+        8.8.4.4;
+    };
+    dnssec-validation auto;
+    auth-nxdomain no;
+    listen-on { 192.168.0.10; 127.0.0.1; };
+    listen-on-v6 { none; };
+    allow-query { any; };
+    allow-recursion { any; };
+    version none;
+    hostname none;
+    server-id none;
+};
+EOL
+
+# Конфигурация named.conf.local
+cat > /etc/bind/named.conf.local << EOL
+zone "mysubdomain.mycompany.com" {
+    type master;
+    file "/etc/bind/zones/db.mysubdomain.mycompany.com";
+    allow-transfer { none; };
+};
+
+zone "0.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/zones/db.192.168.0";
+    allow-transfer { none; };
+};
+EOL
+
+# Создание директории для зон
+mkdir -p /etc/bind/zones
+check_status "создание директории зон"
+
+# Создание файла прямой зоны
+cat > /etc/bind/zones/db.mysubdomain.mycompany.com << EOL
+\$TTL    604800
+@       IN      SOA     dns.mysubdomain.mycompany.com. admin.mysubdomain.mycompany.com. (
+                     2024020201         ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+;
+@       IN      NS      dns.mysubdomain.mycompany.com.
+@       IN      A       192.168.0.10
+dns     IN      A       192.168.0.10
+vc      IN      A       192.168.0.20
+master1 IN      A       192.168.0.100
+master2 IN      A       192.168.0.101
+master3 IN      A       192.168.0.102
+worker1 IN      A       192.168.0.111
+worker2 IN      A       192.168.0.112
+dhcp    IN      A       192.168.0.11
+proxy   IN      A       192.168.0.12
+registry IN     A       192.168.0.13
+nfs     IN      A       192.168.0.14
+salt    IN      A       192.168.0.15
+EOL
+
+# Создание файла обратной зоны
+cat > /etc/bind/zones/db.192.168.72 << EOL
+\$TTL    604800
+@       IN      SOA     dns.mysubdomain.mycompany.com. admin.mysubdomain.mycompany.com. (
+                     2024020201         ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+;
+@       IN      NS      dns.mysubdomain.mycompany.com.
+10      IN      PTR     dns.mysubdomain.mycompany.com.
+20      IN      PTR     vc.mysubdomain.mycompany.com.
+100     IN      PTR     master1.mysubdomain.mycompany.com.
+101     IN      PTR     master2.mysubdomain.mycompany.com.
+102     IN      PTR     master3.mysubdomain.mycompany.com.
+111     IN      PTR     worker1.mysubdomain.mycompany.com.
+112     IN      PTR     worker2.mysubdomain.mycompany.com.
+11      IN      PTR     dhcp.mysubdomain.mycompany.com.
+12      IN      PTR     proxy.mysubdomain.mycompany.com.
+13      IN      PTR     registry.mysubdomain.mycompany.com.
+14      IN      PTR     nfs.mysubdomain.mycompany.com.
+15      IN      PTR     salt.mysubdomain.mycompany.com.
+EOL
+
+# Установка правильных разрешений
+chown -R bind:bind /etc/bind/zones
+chmod -R 644 /etc/bind/zones
+chmod 755 /etc/bind/zones
+check_status "установка прав для зон"
+
+# Проверка конфигурации
+named-checkconf
+check_status "проверка named.conf"
+
+named-checkzone mysubdomain.mycompany.com /etc/bind/zones/db.mysubdomain.mycompany.com
+check_status "проверка прямой зоны"
+
+named-checkzone 0.168.192.in-addr.arpa /etc/bind/zones/db.192.168.0
+check_status "проверка обратной зоны"
+
+# Остановка и отключение systemd-resolved если он запущен
+systemctl stop systemd-resolved
+systemctl disable systemd-resolved
+
+# Перезапуск службы bind9
+systemctl restart named
+check_status "перезапуск named"
+
+systemctl enable named
+check_status "включение named в автозапуск"
+
+# Настройка resolv.conf
+rm -f /etc/resolv.conf
+cat > /etc/resolv.conf << EOL
+nameserver 127.0.0.1
+nameserver 8.8.8.8
+search mysubdomain.mycompany.com
+EOL
+
+# Защита resolv.conf от перезаписи (если файловая система поддерживает)
+if which chattr >/dev/null 2>&1; then
+    chattr +i /etc/resolv.conf 2>/dev/null || true
+fi
+
+# Проверка работоспособности DNS
+echo "Ожидание запуска DNS-сервера..."
+sleep 5
+
+if dig @127.0.0.1 dns.mysubdomain.mycompany.com +short | grep -q "192.168.0.10"; then
+    echo "DNS-сервер успешно настроен и отвечает на запросы!"
+else
+    echo "Внимание: DNS-сервер не отвечает на тестовый запрос"
+fi
+
+echo ""
+echo "Для проверки работы DNS-сервера выполните команды:"
+echo "dig @192.168.0.10 vc.mysubdomain.mycompany.com"
+echo "dig @192.168.0.10 -x 192.168.0.20"
+echo ""
+echo "Текущие настройки сети:"
+ip addr show $IFACE
+echo ""
+echo "Текущие записи в resolv.conf:"
+cat /etc/resolv.conf
