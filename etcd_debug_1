@@ -1,0 +1,100 @@
+Вот полный systemd unit с параметрами в командной строке:
+
+## Создайте/отредактируйте unit файл
+
+```bash
+sudo systemctl stop etcd
+sudo systemctl disable etcd
+
+# Создайте новый unit файл
+sudo nano /etc/systemd/system/etcd.service
+```
+
+## Содержимое для первого узла (192.168.2.151):
+
+```ini
+[Unit]
+Description=etcd key-value store
+Documentation=https://etcd.io
+After=network.target
+
+[Service]
+Type=notify
+User=etcd
+ExecStart=/usr/local/bin/etcd \
+  --name=myetcd1 \
+  --data-dir=/var/lib/etcd \
+  --listen-peer-urls=http://0.0.0.0:2380 \
+  --listen-client-urls=http://0.0.0.0:2379 \
+  --advertise-client-urls=http://192.168.2.151:2379 \
+  --initial-advertise-peer-urls=http://192.168.2.151:2380 \
+  --initial-cluster=myetcd1=http://192.168.2.151:2380,myetcd2=http://192.168.2.152:2380,myetcd3=http://192.168.2.153:2380 \
+  --initial-cluster-token=etcd-cluster-1 \
+  --initial-cluster-state=new \
+  --heartbeat-interval=100 \
+  --election-timeout=1000
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## Для второго узла (192.168.2.152):
+
+Измените только:
+```ini
+  --name=myetcd2 \
+  --advertise-client-urls=http://192.168.2.152:2379 \
+  --initial-advertise-peer-urls=http://192.168.2.152:2380 \
+```
+
+## Для третьего узла (192.168.2.153):
+
+```ini
+  --name=myetcd3 \
+  --advertise-client-urls=http://192.168.2.153:2379 \
+  --initial-advertise-peer-urls=http://192.168.2.153:2380 \
+```
+
+## Примените изменения:
+
+```bash
+# На каждом узле
+sudo systemctl daemon-reload
+sudo systemctl enable etcd
+sudo systemctl start etcd
+```
+
+## Проверка:
+
+```bash
+# Проверьте статус
+systemctl status etcd
+
+# Проверьте порты
+ss -tlnp | grep etcd
+
+# Проверьте подключение
+nc -vz 192.168.2.151 2379
+
+# Проверьте кластер
+ETCDCTL_API=3 etcdctl --endpoints=http://192.168.2.151:2379,http://192.168.2.152:2379,http://192.168.2.153:2379 member list
+ETCDCTL_API=3 etcdctl --endpoints=http://192.168.2.151:2379 endpoint health
+```
+
+## Если используете FQDN вместо IP:
+
+Замените IP-адреса на FQDN во всех `--advertise-client-urls`, `--initial-advertise-peer-urls` и `--initial-cluster`:
+
+```ini
+  --advertise-client-urls=http://myetcd1.mysubdomain.mycompany.com:2379 \
+  --initial-advertise-peer-urls=http://myetcd1.mysubdomain.mycompany.com:2380 \
+  --initial-cluster=myetcd1=http://myetcd1.mysubdomain.mycompany.com:2380,myetcd2=http://myetcd2.mysubdomain.mycompany.com:2380,myetcd3=http://myetcd3.mysubdomain.mycompany.com:2380 \
+```
+
+**Важно**: Убедитесь, что:
+1. Путь `/usr/local/bin/etcd` правильный (проверьте: `which etcd`)
+2. Пользователь `etcd` существует и имеет права на `/var/lib/etcd`
+3. Директория `/var/lib/etcd` пустая перед первым запуском кластера
