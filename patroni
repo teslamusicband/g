@@ -1,0 +1,882 @@
+# Установка и настройка кластера PostgreSQL + Patroni на Oracle Enterprise Linux 9.4
+
+## Введение
+
+Данная инструкция описывает установку высокодоступного кластера PostgreSQL с использованием Patroni для управления репликацией и автоматическим переключением на резервные узлы. Установка выполняется вручную из RPM-пакетов для максимального контроля над версиями компонентов.
+
+## Архитектура кластера
+
+**Узлы etcd** (уже установлены):
+- etcd1: 192.168.60.141
+- etcd2: 192.168.60.142
+- etcd3: 192.168.60.143
+
+**Узлы PostgreSQL + Patroni**:
+- node1: 192.168.60.131
+- node2: 192.168.60.132
+
+**Версии ПО**:
+- PostgreSQL 16.x или 17.x
+- Patroni 4.0.6
+- Python 3.12
+- OEL 9.4
+
+---
+
+## ЧАСТЬ 1: УСТАНОВКА POSTGRESQL
+
+### Шаг 1: Подготовка системы
+
+```bash
+# Обновление системы
+sudo dnf update -y
+
+# Установка базовых инструментов
+sudo dnf install -y wget curl vim
+
+# Добавление в /etc/hosts информации о всех узлах
+sudo tee -a /etc/hosts <<EOF
+192.168.60.141 etcd01
+192.168.60.142 etcd02
+192.168.60.143 etcd03
+192.168.60.131 node01
+192.168.60.132 node02
+EOF
+```
+
+### Шаг 2: Скачивание пакетов PostgreSQL
+
+На управляющей машине с доступом в интернет скачайте необходимые RPM-пакеты с https://download.postgresql.org/pub/repos/yum/
+
+Для PostgreSQL 17 на RHEL 9 используйте путь:
+```
+https://download.postgresql.org/pub/repos/yum/17/redhat/rhel-9-x86_64/
+```
+
+Для общих пакетов:
+```
+https://download.postgresql.org/pub/repos/yum/common/redhat/rhel-9-x86_64/
+```
+
+**Минимальный список пакетов для PostgreSQL 17**:
+```bash
+# Основные пакеты PostgreSQL
+postgresql17-17.5-1PGDG.rhel9.x86_64.rpm
+postgresql17-libs-17.5-1PGDG.rhel9.x86_64.rpm
+postgresql17-server-17.5-1PGDG.rhel9.x86_64.rpm
+postgresql17-contrib-17.5-1PGDG.rhel9.x86_64.rpm
+
+# libpq5 (можно использовать из common)
+libpq5-17.5-1PGDG.rhel8.x86_64.rpm
+```
+
+Перенесите пакеты на серверы node1 и node2.
+
+### Шаг 3: Установка PostgreSQL
+
+На обоих узлах PostgreSQL выполните:
+
+```bash
+# Создание директории для пакетов
+mkdir -p /opt/packages/postgresql
+cd /opt/packages/postgresql
+
+# Копирование RPM-пакетов в эту директорию
+# (предполагается, что вы уже перенесли файлы)
+
+# Установка зависимостей
+sudo dnf install -y libicu libxml2 libxslt openssl-libs readline
+
+# Установка PostgreSQL
+sudo dnf localinstall -y postgresql17-*.rpm
+```
+
+### Шаг 4: Отключение стандартного сервиса PostgreSQL
+
+PostgreSQL будет управляться через Patroni, поэтому стандартный сервис нужно отключить:
+
+```bash
+# Отключение автозапуска PostgreSQL
+sudo systemctl disable postgresql-17
+sudo systemctl stop postgresql-17 2>/dev/null || true
+```
+
+### Шаг 5: Настройка пользователя postgres
+
+```bash
+# Создание домашней директории для пользователя postgres
+sudo mkdir -p /home/postgres
+sudo chown postgres:postgres /home/postgres
+
+# Изменение домашней директории
+sudo usermod --home /home/postgres postgres
+
+# Установка оболочки (опционально)
+sudo usermod --shell /bin/bash postgres
+```
+
+### Шаг 6: Создание директорий для данных PostgreSQL
+
+```bash
+# Создание директории для данных
+sudo mkdir -p /data/17
+sudo chmod 700 /data
+
+# Создание директории для логов
+sudo mkdir -p /data/log
+sudo mkdir -p /data/log/patroni
+
+# Назначение владельца
+sudo chown -R postgres:postgres /data
+
+# Создание директории для сокетов
+sudo mkdir -p /var/run/postgresql
+sudo chown postgres:postgres /var/run/postgresql
+```
+
+**Важно для OEL 9**: Если директория `/var/run/postgresql` удаляется при перезагрузке, добавьте в systemd unit файл строку `RuntimeDirectory=postgresql`.
+
+### Шаг 7: Подготовка сертификатов для Patroni
+
+Скопируйте сертификаты, которые были сгенерированы для etcd, на узлы Patroni:
+
+```bash
+# Создание директории для сертификатов
+sudo mkdir -p /opt/patroni/.tls
+
+# Копирование сертификатов с сервера etcd
+# Для node01:
+scp root@etcd01:/etc/default/etcd/.tls/ca.crt /opt/patroni/.tls/
+scp root@etcd01:/etc/default/etcd/.tls/node01.crt /opt/patroni/.tls/
+scp root@etcd01:/etc/default/etcd/.tls/node01.key /opt/patroni/.tls/
+
+# Для node02:
+scp root@etcd01:/etc/default/etcd/.tls/ca.crt /opt/patroni/.tls/
+scp root@etcd01:/etc/default/etcd/.tls/node02.crt /opt/patroni/.tls/
+scp root@etcd01:/etc/default/etcd/.tls/node02.key /opt/patroni/.tls/
+
+# Назначение прав
+sudo chmod 744 /opt/patroni/.tls
+sudo chmod 600 /opt/patroni/.tls/*.key
+sudo chmod 644 /opt/patroni/.tls/*.crt
+```
+
+---
+
+## ЧАСТЬ 2: УСТАНОВКА PATRONI
+
+### Шаг 1: Установка Python 3.12
+
+Для OEL 9.4 проверьте, установлен ли Python 3.12:
+
+```bash
+python3 --version
+```
+
+Если версия ниже 3.12, установите вручную:
+
+```bash
+# Установка зависимостей для сборки Python
+sudo dnf install -y gcc openssl-devel libffi-devel bzip2-devel \
+    readline-devel sqlite-devel tk-devel
+
+# Скачивание и распаковка Python 3.12
+cd /tmp
+wget https://www.python.org/ftp/python/3.12.7/Python-3.12.7.tgz
+tar -xzf Python-3.12.7.tgz
+cd Python-3.12.7
+
+# Сборка и установка
+./configure --enable-optimizations --with-ssl
+make -j$(nproc)
+sudo make altinstall
+
+# Создание символических ссылок
+sudo ln -sf /usr/local/bin/python3.12 /usr/bin/python3
+sudo ln -sf /usr/local/bin/pip3.12 /usr/bin/pip3
+```
+
+### Шаг 2: Создание виртуального окружения Python
+
+```bash
+# Создание виртуального окружения
+python3 -m venv /opt/patroni
+
+# Активация виртуального окружения
+source /opt/patroni/bin/activate
+
+# Обновление pip
+pip3 install --upgrade pip setuptools wheel
+```
+
+### Шаг 3: Скачивание пакетов для Patroni
+
+На машине с доступом в интернет скачайте следующие Python пакеты (wheel-файлы):
+
+```bash
+# Создание директории для пакетов
+mkdir -p /opt/patroni/packages
+cd /opt/patroni/packages
+
+# Скачивание пакетов через pip download
+pip3 download patroni[etcd3]
+pip3 download psycopg2-binary
+
+# Или скачайте вручную с PyPI следующие пакеты:
+# - patroni-4.0.6-py3-none-any.whl
+# - click-8.1.7-py3-none-any.whl
+# - dnspython-2.6.1-py3-none-any.whl
+# - prettytable-3.10.2-py3-none-any.whl
+# - psutil-6.0.0-cp312-abi3-manylinux_2_12_x86_64.manylinux2010_x86_64.whl
+# - python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+# - python-etcd-0.4.5.tar.gz
+# - PyYAML-6.0.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+# - setuptools-75.1.0-py3-none-any.whl
+# - six-1.16.0-py2.py3-none-any.whl
+# - urllib3-2.2.3-py3-none-any.whl
+# - wcwidth-0.2.13-py2.py3-none-any.whl
+# - ydiff-1.3.tar.gz
+# - psycopg2_binary-2.9.10-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+```
+
+Перенесите все `.whl` и `.tar.gz` файлы в `/opt/patroni/packages/` на серверах node1 и node2.
+
+### Шаг 4: Установка Patroni
+
+```bash
+# Переход в директорию с пакетами
+cd /opt/patroni/packages
+
+# Активация виртуального окружения
+source /opt/patroni/bin/activate
+
+# Установка пакетов без доступа к интернету
+pip3 install --no-index --find-links=. patroni[etcd3]
+pip3 install --no-index --find-links=. psycopg2-binary
+
+# Назначение владельца
+sudo chown -R postgres:postgres /opt/patroni
+```
+
+### Шаг 5: Настройка переменных окружения для postgres
+
+Добавьте в профиль пользователя postgres:
+
+```bash
+# Переключение на пользователя postgres
+sudo su - postgres
+
+# Редактирование .bashrc
+cat >> ~/.bashrc <<'EOF'
+
+# PostgreSQL и Patroni
+export PG_CONFIG=/usr/pgsql-17/bin/pg_config
+export PATRONI_CONFIG_FILE=/etc/patroni/config.yml
+export PATH=/opt/patroni/bin:/usr/pgsql-17/bin:$PATH
+
+# Активация виртуального окружения
+source /opt/patroni/bin/activate
+EOF
+
+# Применение изменений
+source ~/.bashrc
+
+# Выход из пользователя postgres
+exit
+```
+
+### Шаг 6: Проверка установки
+
+```bash
+# Проверка версии Patroni
+sudo su - postgres -c "patroni --version"
+
+# Должно вывести: patroni 4.0.6
+```
+
+---
+
+## ЧАСТЬ 3: НАСТРОЙКА PATRONI
+
+### Шаг 1: Создание конфигурационного файла
+
+Создайте директорию для конфигурации:
+
+```bash
+sudo mkdir -p /etc/patroni
+```
+
+### Шаг 2: Конфигурация для node01
+
+Создайте файл `/etc/patroni/config.yml` на node01:
+
+```yaml
+scope: patroni_cluster
+namespace: /patroni
+name: patroni_node01
+
+log:
+  level: INFO
+  dir: /data/log/patroni
+  file_size: 50000000
+  file_num: 10
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: node01:8008
+  verify_client: optional
+  cafile: /opt/patroni/.tls/ca.crt
+  certfile: /opt/patroni/.tls/node01.crt
+  keyfile: /opt/patroni/.tls/node01.key
+
+ctl:
+  cacert: /opt/patroni/.tls/ca.crt
+  certfile: /opt/patroni/.tls/node01.crt
+  keyfile: /opt/patroni/.tls/node01.key
+
+etcd3:
+  hosts: 
+    - etcd01:2379
+    - etcd02:2379
+    - etcd03:2379
+  protocol: https
+  cacert: /opt/patroni/.tls/ca.crt
+  cert: /opt/patroni/.tls/node01.crt
+  key: /opt/patroni/.tls/node01.key
+
+watchdog:
+  mode: off
+
+bootstrap:
+  dcs:
+    failsafe_mode: true
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: true
+    synchronous_mode_strict: true
+    synchronous_node_count: 1
+    master_start_timeout: 30
+    slots:
+      prod_replica1:
+        type: physical
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+    - auth: scram-sha-256
+
+  pg_hba:
+    - local all all peer
+    - host all all 127.0.0.1/32 scram-sha-256
+    - host all all 0.0.0.0/0 md5
+    - host replication replicator 127.0.0.1/32 scram-sha-256
+    - host replication replicator 192.168.60.0/24 scram-sha-256
+
+  users:
+    admin:
+      password: 'change_me_admin_password'
+      options:
+        - createdb
+        - createrole
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: 192.168.60.131:5432
+  use_unix_socket: true
+  data_dir: /data/17
+  config_dir: /data/17
+  bin_dir: /usr/pgsql-17/bin
+  pgpass: /home/postgres/.pgpass_patroni
+
+  authentication:
+    replication:
+      username: replicator
+      password: 'change_me_replication_password'
+    superuser:
+      username: postgres
+      password: 'change_me_superuser_password'
+    rewind:
+      username: postgres
+      password: 'change_me_superuser_password'
+
+  parameters:
+    unix_socket_directories: '/var/run/postgresql'
+    shared_buffers: '512MB'
+    effective_cache_size: '1GB'
+    maintenance_work_mem: '256MB'
+    wal_level: replica
+    wal_keep_size: '512MB'
+    max_connections: 100
+    max_wal_senders: 5
+    max_replication_slots: 5
+    hot_standby: 'on'
+    synchronous_commit: 'on'
+    synchronous_standby_names: '*'
+    checkpoint_completion_target: 0.7
+    
+    # Логирование
+    logging_collector: 'on'
+    log_destination: 'stderr'
+    log_directory: '/data/log'
+    log_filename: 'postgresql-%Y-%m-%d.log'
+    log_rotation_size: '100MB'
+    log_rotation_age: '1d'
+    log_connections: 'on'
+    log_disconnections: 'on'
+    log_statement: 'ddl'
+    log_line_prefix: '%m [%p] %q%u@%d '
+    log_min_duration_statement: -1
+    log_min_error_statement: 'error'
+    log_min_messages: 'warning'
+    log_error_verbosity: 'verbose'
+    log_hostname: 'off'
+    log_duration: 'off'
+    log_timezone: 'Europe/Moscow'
+    
+    # Прочее
+    timezone: 'Europe/Moscow'
+    lc_messages: 'C.UTF-8'
+    password_encryption: 'scram-sha-256'
+    superuser_reserved_connections: 3
+    compute_query_id: 'on'
+
+  create_replica_methods:
+    - basebackup
+
+  basebackup:
+    max-rate: '100M'
+    checkpoint: 'fast'
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+```
+
+### Шаг 3: Конфигурация для node02
+
+Создайте файл `/etc/patroni/config.yml` на node02:
+
+**Важно**: Измените следующие параметры:
+- `name: patroni_node02`
+- `connect_address: node02:8008`
+- Все пути к сертификатам: `node01.crt` → `node02.crt`, `node01.key` → `node02.key`
+- `connect_address: 192.168.60.132:5432` (IP node02)
+
+Скопируйте конфигурацию с node01 и внесите изменения:
+
+```bash
+# На node02
+sudo scp root@node01:/etc/patroni/config.yml /etc/patroni/config.yml
+
+# Замените параметры (используйте sed или vi)
+sudo sed -i 's/patroni_node01/patroni_node02/g' /etc/patroni/config.yml
+sudo sed -i 's/node01/node02/g' /etc/patroni/config.yml
+sudo sed -i 's/192.168.60.131/192.168.60.132/g' /etc/patroni/config.yml
+```
+
+### Шаг 4: Валидация конфигурации
+
+На обоих узлах проверьте корректность конфигурации:
+
+```bash
+sudo su - postgres -c "patroni --validate-config /etc/patroni/config.yml"
+```
+
+Если ошибок нет, переходите к следующему шагу.
+
+### Шаг 5: Создание systemd unit файла
+
+Создайте файл `/etc/systemd/system/patroni.service` на обоих узлах:
+
+```ini
+[Unit]
+Description=Patroni high-availability PostgreSQL
+Documentation=https://patroni.readthedocs.io/
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=postgres
+Group=postgres
+ExecStart=/opt/patroni/bin/patroni /etc/patroni/config.yml
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=process
+TimeoutSec=30
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+RuntimeDirectory=postgresql
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Шаг 6: Применение конфигурации systemd
+
+```bash
+# Перезагрузка конфигурации systemd
+sudo systemctl daemon-reload
+
+# Включение автозапуска
+sudo systemctl enable patroni
+```
+
+---
+
+## ЧАСТЬ 4: ЗАПУСК КЛАСТЕРА
+
+### Шаг 1: Запуск Patroni на первом узле (node01)
+
+```bash
+# Запуск Patroni на node01
+sudo systemctl start patroni
+
+# Проверка статуса
+sudo systemctl status patroni
+
+# Просмотр логов
+sudo journalctl -u patroni -f
+```
+
+Дождитесь инициализации кластера. Patroni автоматически инициализирует PostgreSQL и назначит node01 лидером.
+
+### Шаг 2: Запуск Patroni на втором узле (node02)
+
+После успешного запуска на node01, запустите Patroni на node02:
+
+```bash
+# Запуск Patroni на node02
+sudo systemctl start patroni
+
+# Проверка статуса
+sudo systemctl status patroni
+
+# Просмотр логов
+sudo journalctl -u patroni -f
+```
+
+node02 автоматически подключится к кластеру как реплика.
+
+### Шаг 3: Проверка кластера
+
+```bash
+# Переключение на пользователя postgres
+sudo su - postgres
+
+# Проверка статуса кластера
+patronictl -c /etc/patroni/config.yml list
+
+# Вывод должен показать примерно следующее:
+# + Cluster: patroni_cluster ----+--------+---------+----+-----------+
+# | Member         | Host           | Role   | State   | TL | Lag in MB |
+# +----------------+----------------+--------+---------+----+-----------+
+# | patroni_node01 | 192.168.60.131 | Leader | running |  1 |           |
+# | patroni_node02 | 192.168.60.132 | Replica| running |  1 |         0 |
+# +----------------+----------------+--------+---------+----+-----------+
+```
+
+### Шаг 4: Проверка подключения к PostgreSQL
+
+```bash
+# Подключение к PostgreSQL на лидере
+psql -h 192.168.60.131 -U postgres -d postgres
+
+# Проверка репликации
+SELECT * FROM pg_stat_replication;
+```
+
+---
+
+## ЧАСТЬ 5: ТЕСТИРОВАНИЕ FAILOVER
+
+### Шаг 1: Ручное переключение (Switchover)
+
+```bash
+# От имени пользователя postgres
+sudo su - postgres
+
+# Выполнение switchover
+patronictl -c /etc/patroni/config.yml switchover
+
+# Система запросит подтверждение:
+# - Master: patroni_node01
+# - Candidate: patroni_node02 или [any]
+# - When: now
+
+# Проверка статуса после переключения
+patronictl -c /etc/patroni/config.yml list
+```
+
+Теперь node02 должен стать лидером, а node01 — репликой.
+
+### Шаг 2: Автоматическое переключение (Failover)
+
+Для тестирования автоматического переключения остановите Patroni на текущем лидере:
+
+```bash
+# На текущем лидере (например, node02)
+sudo systemctl stop patroni
+```
+
+Patroni автоматически назначит node01 новым лидером. Проверьте статус:
+
+```bash
+# На node01
+sudo su - postgres
+patronictl -c /etc/patroni/config.yml list
+```
+
+Запустите Patroni обратно на node02:
+
+```bash
+# На node02
+sudo systemctl start patroni
+```
+
+node02 автоматически присоединится как реплика.
+
+---
+
+## ЧАСТЬ 6: МОНИТОРИНГ И УПРАВЛЕНИЕ
+
+### Просмотр логов
+
+```bash
+# Логи Patroni
+sudo journalctl -u patroni -f
+
+# Логи PostgreSQL
+tail -f /data/log/postgresql-$(date +%Y-%m-%d).log
+
+# Логи Patroni в файле
+tail -f /data/log/patroni/patroni.log
+```
+
+### Полезные команды patronictl
+
+```bash
+# Статус кластера
+patronictl -c /etc/patroni/config.yml list
+
+# Переключение на другую ноду
+patronictl -c /etc/patroni/config.yml switchover
+
+# Перезапуск узла
+patronictl -c /etc/patroni/config.yml restart patroni_node01
+
+# Перезагрузка конфигурации
+patronictl -c /etc/patroni/config.yml reload patroni_node01
+
+# Редактирование конфигурации в DCS (etcd)
+patronictl -c /etc/patroni/config.yml edit-config
+
+# История переключений
+patronictl -c /etc/patroni/config.yml history
+```
+
+### REST API Patroni
+
+Patroni предоставляет REST API для мониторинга:
+
+```bash
+# Проверка health-check
+curl -k https://node01:8008/health
+
+# Статус лидера
+curl -k https://node01:8008/leader
+
+# Информация о кластере
+curl -k https://node01:8008/cluster
+```
+
+---
+
+## ЧАСТЬ 7: БЕЗОПАСНОСТЬ И ОПТИМИЗАЦИЯ
+
+### Настройка firewall
+
+```bash
+# PostgreSQL порт
+sudo firewall-cmd --permanent --add-port=5432/tcp
+
+# Patroni REST API
+sudo firewall-cmd --permanent --add-port=8008/tcp
+
+# Применение правил
+sudo firewall-cmd --reload
+```
+
+### SELinux
+
+Если SELinux включен, могут потребоваться дополнительные настройки:
+
+```bash
+# Проверка статуса SELinux
+getenforce
+
+# Если возникают проблемы, добавьте правила или переведите в Permissive режим
+sudo setenforce 0
+```
+
+### Рекомендации по паролям
+
+Замените все пароли в конфигурации `/etc/patroni/config.yml`:
+- `admin` пользователь
+- `replicator` пользователь
+- `postgres` суперпользователь
+
+Используйте надежные пароли и храните их в защищенном месте.
+
+### Настройка watchdog (опционально)
+
+Для production окружения рекомендуется включить watchdog:
+
+1. Загрузите модуль ядра:
+```bash
+sudo modprobe softdog
+echo "softdog" | sudo tee -a /etc/modules-load.d/softdog.conf
+```
+
+2. Создайте udev правило:
+```bash
+sudo tee /etc/udev/rules.d/99-watchdog.rules <<EOF
+KERNEL=="watchdog", OWNER="postgres", GROUP="postgres", MODE="0660"
+EOF
+
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+3. В конфигурации Patroni измените:
+```yaml
+watchdog:
+  mode: required
+  device: /dev/watchdog
+```
+
+---
+
+## ЧАСТЬ 8: TROUBLESHOOTING
+
+### Проблема: Patroni не может подключиться к etcd
+
+**Решение**:
+1. Проверьте доступность etcd:
+```bash
+etcdctl --endpoints=https://etcd01:2379,https://etcd02:2379,https://etcd03:2379 \
+  --cacert=/opt/patroni/.tls/ca.crt \
+  --cert=/opt/patroni/.tls/node01.crt \
+  --key=/opt/patroni/.tls/node01.key \
+  endpoint health
+```
+
+2. Проверьте сертификаты и права доступа
+3. Проверьте firewall и сетевую связность
+
+### Проблема: PostgreSQL не стартует
+
+**Решение**:
+1. Проверьте права на директории:
+```bash
+ls -la /data/17
+ls -la /var/run/postgresql
+```
+
+2. Проверьте логи:
+```bash
+journalctl -u patroni -n 100 --no-pager
+tail -n 100 /data/log/patroni/patroni.log
+```
+
+3. Попробуйте запустить PostgreSQL вручную:
+```bash
+sudo su - postgres
+/usr/pgsql-17/bin/postgres -D /data/17
+```
+
+### Проблема: Split-brain
+
+Если произошел split-brain, выполните:
+
+```bash
+# Остановите Patroni на обеих нодах
+sudo systemctl stop patroni
+
+# Очистите данные DCS
+etcdctl --endpoints=https://etcd01:2379 \
+  --cacert=/opt/patroni/.tls/ca.crt \
+  --cert=/opt/patroni/.tls/node01.crt \
+  --key=/opt/patroni/.tls/node01.key \
+  del --prefix /patroni
+
+# Запустите Patroni сначала на желаемом мастере
+sudo systemctl start patroni
+
+# Затем на репликах
+```
+
+---
+
+## ЗАКЛЮЧЕНИЕ
+
+Вы настроили высокодоступный кластер PostgreSQL с Patroni на Oracle Enterprise Linux 9.4. Кластер автоматически выполняет failover при отказе мастера и поддерживает ручное переключение.
+
+**Следующие шаги**:
+1. Настройте мониторинг (Prometheus + Grafana)
+2. Настройте резервное копирование (pgBackRest, Barman)
+3. Настройте connection pooler (pgBouncer, pgpool-II)
+4. Настройте балансировщик нагрузки (HAProxy, Keepalived)
+
+**Полезные ссылки**:
+- Документация Patroni: https://patroni.readthedocs.io/
+- Документация PostgreSQL: https://www.postgresql.org/docs/
+- Репозиторий PostgreSQL: https://download.postgresql.org/pub/repos/yum/
+
+
+
+
+################################
+
+Я создал подробную пошаговую инструкцию для установки PostgreSQL + Patroni на Oracle Enterprise Linux 9.4. Инструкция включает:
+
+**Основные разделы:**
+
+1. **Установка PostgreSQL** - скачивание и установка RPM-пакетов, настройка пользователя и директорий
+2Продолжу описание инструкции:
+
+**Основные разделы инструкции:**
+
+1. **Установка PostgreSQL** - скачивание и установка RPM-пакетов, настройка пользователя и директорий
+2. **Установка Patroni** - установка Python 3.12, создание виртуального окружения, установка всех необходимых Python-пакетов
+3. **Настройка Patroni** - полный конфигурационный файл с SSL-сертификатами, настройками репликации и логирования
+4. **Запуск кластера** - пошаговый запуск обеих нод и проверка состояния
+5. **Тестирование failover** - проверка ручного и автоматического переключения
+6. **Мониторинг** - команды patronictl и REST API для управления
+7. **Безопасность** - настройка firewall, SELinux, паролей
+8. **Troubleshooting** - решение типичных проблем
+
+**Ключевые отличия от исходной статьи:**
+
+- ✅ Адаптировано для **OEL 9.4** (вместо CentOS 8)
+- ✅ Полный список команд для **каждого шага**
+- ✅ Указаны **точные версии пакетов** (PostgreSQL 17.5, Patroni 4.0.6)
+- ✅ Добавлены **ссылки на репозитории** для скачивания
+- ✅ Включены **проверки после каждого шага**
+- ✅ Раздел troubleshooting с решением проблем
+- ✅ Команды для **валидации конфигурации**
+- ✅ Настройка **RuntimeDirectory** для OEL 9
+
+**Дополнительные улучшения:**
+
+- Добавлен список всех необходимых Python wheel-пакетов
+- Детальная настройка логирования PostgreSQL
+- Примеры команд patronictl для управления кластером
+- Настройка watchdog для production
+- Рекомендации по следующим шагам (мониторинг, бэкапы, балансировщик)
+
+Инструкция готова к использованию. Если нужны дополнения по конкретным разделам или возникнут вопросы при установке - дайте знать!
