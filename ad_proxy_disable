@@ -1,0 +1,119 @@
+Есть несколько способов отключить WPAD для конкретных 2 серверов:
+
+## Вариант 1: Локальная групповая политика (gpedit.msc) - самый простой
+
+На каждом из 2 серверов локально:
+
+```powershell
+gpedit.msc
+```
+
+Перейдите:
+- **Computer Configuration → Administrative Templates → Windows Components → Internet Explorer**
+- Найдите: **"Disable automatically detect settings"** или **"Turn off Automatic Detection of proxy settings"**
+- Установите: **Enabled**
+
+Или через реестр напрямую на этих серверах:
+
+```powershell
+# Отключить автоопределение прокси
+Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings" -Name AutoDetect -Value 0 -Type DWord
+
+# Принудительно обновить политики
+gpupdate /force
+```
+
+## Вариант 2: Создать отдельную GPO с WMI-фильтром (требует доменного админа)
+
+Попросите доменного администратора:
+
+1. **Создать новую GPO** (например, "Disable WPAD for specific servers")
+2. Настроить в ней отключение WPAD
+3. **Создать WMI-фильтр** по именам серверов:
+
+```wql
+SELECT * FROM Win32_ComputerSystem WHERE Name = "SERVER1" OR Name = "SERVER2"
+```
+
+4. Применить WMI-фильтр к GPO
+5. Привязать GPO к OU, где находятся ваши серверы
+
+## Вариант 3: Создать отдельную OU (требует доменного админа)
+
+1. Создать отдельную OU (например, "Servers_NoWPAD")
+2. Переместить 2 сервера в эту OU
+3. Создать GPO с отключением WPAD для этой OU
+4. Опционально: заблокировать наследование родительских политик
+
+## Вариант 4: Security Group Filtering (требует доменного админа)
+
+1. Создать группу безопасности AD (например, "NoWPAD_Servers")
+2. Добавить 2 сервера в эту группу
+3. Создать GPO с отключением WPAD
+4. В Security Filtering GPO оставить только эту группу
+
+## Вариант 5: Скрипт через Scheduled Task (если нет доменного админа)
+
+Создайте на каждом сервере задачу планировщика, которая выполняется при запуске:
+
+```powershell
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-Command "Set-ItemProperty -Path ''HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings'' -Name AutoDetect -Value 0 -Type DWord"'
+
+$trigger = New-ScheduledTaskTrigger -AtStartup
+
+Register-ScheduledTask -TaskName "DisableWPAD" -Action $action -Trigger $trigger -RunLevel Highest -User "SYSTEM"
+```
+
+## Рекомендация:
+
+**Если вы локальный админ на этих 2 серверах** → используйте **Вариант 1** (локальная политика или реестр).
+
+**Если нужно централизованное управление** → попросите доменного админа создать отдельную GPO с **WMI-фильтром (Вариант 2)** или переместить серверы в отдельную **OU (Вариант 3)**.
+
+
+
+К сожалению, этот конкретный ключ реестра **не устанавливается напрямую групповой политикой** - это автоматически обнаруженный адрес через протокол WPAD (Web Proxy Auto-Discovery).
+
+## Что происходит:
+
+**HKEY_USERS\S-1-5-19** - это профиль учетной записи LOCAL SERVICE.
+
+Путь `\Wpad\00-00-0c-9f-f0-92\WpadDetectedUrl` показывает:
+- `Wpad` - протокол автоматического обнаружения прокси
+- `00-00-0c-9f-f0-92` - MAC-адрес сетевого адаптера
+- `WpadDetectedUrl` - обнаруженный URL
+
+Система **автоматически нашла** этот адрес через:
+1. **DHCP Option 252** (WPAD URL)
+2. **DNS запрос** к `wpad.company.com`
+
+## Как найти источник (GPO):
+
+Политика, которая **включает** WPAD, находится здесь:
+
+```powershell
+# Проверьте эти ключи на наличие GPO:
+Get-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings" -ErrorAction SilentlyContinue
+
+# Конкретно ищите:
+Get-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings" -Name AutoDetect -ErrorAction SilentlyContinue
+```
+
+В вашем `gpresult /H` отчете ищите:
+- **"Automatically detect settings"** (Автоматически определять параметры)
+- **"Auto Detect"** или **"AutoDetect"**
+- В разделе **Internet Explorer → Connection settings**
+
+## Альтернативный способ:
+
+```powershell
+# Посмотрите ACL (права доступа) на этот ключ реестра
+Get-Acl -Path "Registry::HKEY_USERS\S-1-5-19\Software\Microsoft\Windows\CurrentVersion\Internet Settings" | Format-List
+
+# Посмотрите все политики Internet Explorer
+gpresult /Scope Computer /v | Select-String -Pattern "Internet Explorer" -Context 5,15
+```
+
+**Вывод**: Политика не задает конкретный адрес `proxy.company.com/settings.dat`, а включает **автоматическое обнаружение** (WPAD), после чего система сама находит адрес через DHCP или DNS.
+
+Ищите в GPO настройку **"Automatically detect settings"** = **Enabled**.
