@@ -1,0 +1,181 @@
+Управление миграциями БД в production — это критически важная задача. Вот проверенные подходы:
+
+## Основные принципы
+
+### 1. **Миграции должны быть обратимыми**
+Каждая миграция состоит из двух частей:
+- **UP** (применение изменений)
+- **DOWN** (откат изменений)
+
+### 2. **Backward-compatible миграции**
+Самый надёжный подход — изменения должны быть совместимы со старой версией кода:
+
+**Плохо:**
+```sql
+-- Сразу переименовываем колонку
+ALTER TABLE users RENAME COLUMN name TO full_name;
+```
+
+**Хорошо (поэтапно):**
+```sql
+-- Шаг 1: добавить новую колонку
+ALTER TABLE users ADD COLUMN full_name VARCHAR(255);
+
+-- Шаг 2: скопировать данные
+UPDATE users SET full_name = name WHERE full_name IS NULL;
+
+-- Шаг 3 (следующий релиз): обновить код для работы с full_name
+
+-- Шаг 4 (ещё через релиз): удалить старую колонку
+ALTER TABLE users DROP COLUMN name;
+```
+
+### 3. **Инструменты миграций**
+
+Используйте специализированные инструменты:
+
+**Для Node.js:**
+- **Knex.js** — простой и надёжный
+- **TypeORM** / **Sequelize** — если используете ORM
+- **node-pg-migrate** — легковесный
+
+**Для Python:**
+- **Alembic** (с SQLAlchemy)
+- **Django migrations**
+
+**Для Go:**
+- **golang-migrate**
+- **goose**
+
+**Универсальные:**
+- **Flyway** (Java, но работает везде)
+- **Liquibase**
+
+### 4. **Стратегия безопасного деплоя**
+
+```sql
+-- Всегда в транзакции, где возможно
+BEGIN;
+
+-- Создаём новую таблицу вместо изменения существующей
+CREATE TABLE users_new (LIKE users INCLUDING ALL);
+ALTER TABLE users_new ADD COLUMN new_field INT;
+
+-- Копируем данные порциями
+INSERT INTO users_new SELECT *, NULL FROM users LIMIT 10000;
+
+-- Проверяем
+SELECT COUNT(*) FROM users_new;
+
+-- Если всё ОК, делаем swap
+ALTER TABLE users RENAME TO users_old;
+ALTER TABLE users_new RENAME TO users;
+
+COMMIT;
+-- Если что-то не так — ROLLBACK вручную
+```
+
+### 5. **Техники без downtime**
+
+**Добавление NOT NULL колонки:**
+```sql
+-- Плохо: блокирует таблицу
+ALTER TABLE users ADD COLUMN email VARCHAR(255) NOT NULL DEFAULT '';
+
+-- Хорошо: поэтапно
+-- Шаг 1: добавить nullable
+ALTER TABLE users ADD COLUMN email VARCHAR(255);
+
+-- Шаг 2: заполнить данными (батчами!)
+UPDATE users SET email = 'default@example.com' 
+WHERE email IS NULL AND id BETWEEN 1 AND 10000;
+
+-- Шаг 3: добавить constraint
+ALTER TABLE users ALTER COLUMN email SET NOT NULL;
+```
+
+**Создание индексов:**
+```sql
+-- Используйте CONCURRENTLY для больших таблиц
+CREATE INDEX CONCURRENTLY idx_users_email ON users(email);
+```
+
+### 6. **Откат без бэкапа**
+
+Если бэкап запрещён, есть несколько подходов:
+
+**а) Point-in-Time Recovery (PITR)**
+- Настройте WAL архивирование в PostgreSQL
+- Позволяет откатиться на любую секунду в прошлом
+- Не требует полного бэкапа перед каждым деплоем
+
+**б) Shadow tables (теневые таблицы)**
+```sql
+-- Перед миграцией
+CREATE TABLE users_backup_20241004 AS SELECT * FROM users;
+
+-- После успешной миграции (через несколько дней)
+DROP TABLE users_backup_20241004;
+```
+
+**в) Логическая репликация**
+- Держите реплику на предыдущей версии схемы
+- При проблемах переключаетесь на неё
+
+**г) Blue-Green deployment для БД**
+- Две идентичные БД
+- Накатываете миграцию на "green"
+- Переключаете приложение
+- "Blue" остаётся как fallback
+
+### 7. **Чеклист перед production**
+
+```
+☐ Миграция протестирована на копии production данных
+☐ Есть скрипт отката (DOWN миграция)
+☐ Оценено время выполнения
+☐ Проверены блокировки таблиц
+☐ Миграция разбита на минимальные шаги
+☐ Есть мониторинг и алерты
+☐ Определён rollback план
+☐ Команда предупреждена о maintenance window (если нужен)
+```
+
+### 8. **Мониторинг миграций**
+
+```sql
+-- Логируйте начало/конец миграции
+CREATE TABLE migration_log (
+    id SERIAL PRIMARY KEY,
+    version VARCHAR(255),
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    status VARCHAR(50),
+    error_message TEXT
+);
+```
+
+### 9. **Критические правила**
+
+❌ **Никогда не делайте:**
+- DROP TABLE/COLUMN в первом же релизе
+- Изменение типа колонки с данными
+- Миграции без тестирования на реальном объёме данных
+
+✅ **Всегда делайте:**
+- Тестируйте на staging с production-like данными
+- Измеряйте время выполнения
+- Делайте миграции идемпотентными
+- Версионируйте схему БД вместе с кодом
+
+## Пример структуры проекта
+
+```
+/migrations
+  /001_create_users.up.sql
+  /001_create_users.down.sql
+  /002_add_email_to_users.up.sql
+  /002_add_email_to_users.down.sql
+```
+
+Главное — миграции должны быть **маленькими**, **тестируемыми** и **обратимыми**. Если нельзя сделать бэкап, то PITR + поэтапные миграции — ваш лучший друг.
