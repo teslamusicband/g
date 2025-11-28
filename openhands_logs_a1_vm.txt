@@ -1,0 +1,269 @@
+root@a1:~# docker logs 0a547fda346f
+18:44:10 - openhands:WARNING: action_execution_server.py:654 - Starting Action Execution Server
+18:44:10 - openhands:INFO: action_execution_server.py:680 - Starting file viewer server
+18:44:10 - openhands:INFO: file_viewer_server.py:92 - File viewer server URL saved to /tmp/oh-server-url: http://localhost:39918
+18:44:10 - openhands:INFO: file_viewer_server.py:93 - Starting file viewer server on port 39918
+18:44:10 - openhands:INFO: action_execution_server.py:685 - File viewer server started at http://localhost:39918
+/openhands/poetry/openhands-ai-5O4_aCHf-py3.12/lib/python3.12/site-packages/websockets/legacy/__init__.py:6: DeprecationWarning: websockets.legacy is deprecated; see https://websockets.readthedocs.io/en/stable/howto/upgrade.html for upgrade instructions
+  warnings.warn(  # deprecated in 14.0 - 2024-11-09
+/openhands/poetry/openhands-ai-5O4_aCHf-py3.12/lib/python3.12/site-packages/uvicorn/protocols/websockets/websockets_impl.py:17: DeprecationWarning: websockets.server.WebSocketServerProtocol is deprecated
+  from websockets.server import WebSocketServerProtocol
+18:44:11 - openhands:INFO: action_execution_server.py:700 - Initializing ActionExecutor...
+18:44:11 - openhands:INFO: action_execution_server.py:217 - No max memory limit set, using all available system memory
+18:44:29 - openhands:INFO: browser_env.py:103 - Successfully called env.reset
+18:44:29 - openhands:INFO: browser_env.py:121 - Browser env started.
+Server bound to 0.0.0.0:49049 (IPv4)
+
+Extension host agent listening on 49049
+
+
+
+[18:44:36]
+
+
+
+
+
+
+
+
+
+Web UI available at http://localhost:49049?tkn=15f6acb6-369f-4b7c-8a67-799e06d91a88
+
+18:45:00 - openhands:INFO: action_execution_server.py:366 - Initializing by running 1 bash commands...
+18:45:00 - openhands:INFO: action_execution_server.py:710 - ActionExecutor initialized.
+18:45:00 - openhands:INFO: action_execution_server.py:720 - Initializing MCP Proxy Manager...
+18:45:00 - openhands.runtime.mcp.proxy.manager:INFO: manager.py:58 - No MCP servers configured for FastMCP Proxy, skipping initialization.
+18:45:00 - openhands.runtime.mcp.proxy.manager:INFO: manager.py:92 - No MCP servers configured for FastMCP Proxy, skipping mount.
+[Errno 2] No such file or directory: '.openhands/setup.sh'
+[Errno 2] No such file or directory: '.openhands/pre-commit.sh'
+[Errno 2] No such file or directory: '/workspace/.openhands_instructions'
+18:45:05 - openhands:INFO: action_execution_server.py:866 - Updating MCP server with tools: [
+  {
+    "name": "fetch",
+    "command": "uvx",
+    "args": [
+      "mcp-server-fetch"
+    ],
+    "env": {}
+  }
+]
+18:45:05 - openhands.runtime.mcp.proxy.manager:INFO: manager.py:72 - FastMCP Proxy authentication disabled
+18:45:05 - openhands.runtime.mcp.proxy.manager:INFO: manager.py:80 - FastMCP Proxy initialized successfully
+18:45:05 - openhands.runtime.mcp.proxy.manager:INFO: manager.py:128 - Mounted FastMCP Proxy app at /mcp
+18:45:05 - openhands:INFO: action_execution_server.py:872 - MCP Proxy Manager updated and remounted successfully
+Downloading lxml (5.0MiB)
+Downloading pydantic-core (2.0MiB)
+Downloading cryptography (4.3MiB)
+ Downloading pydantic-core
+ Downloading cryptography
+ Downloading lxml
+Installed 44 packages in 49ms
+root@a1:~# docker logs faa5fa1e7ef2
+Starting OpenHands...
+Running OpenHands as root
+18:32:25 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+18:32:25 - openhands:INFO: server_config.py:55 - Using config class None
+/app/.venv/lib/python3.13/site-packages/fastmcp/server/server.py:255: DeprecationWarning: Providing `stateless_http` when creating a server is deprecated. Provide it when calling `run` or as a global setting instead.
+  self._handle_deprecated_settings(
+INFO:     Started server process [8]
+INFO:     Waiting for application startup.
+INFO:mcp.server.streamable_http_manager:StreamableHTTP session manager started
+INFO:alembic.runtime.migration:Context impl SQLiteImpl.
+INFO:alembic.runtime.migration:Will assume non-transactional DDL.
+INFO:alembic.runtime.migration:Running upgrade  -> 001, Sync DB with Models
+INFO:alembic.runtime.migration:Running upgrade 001 -> 002, Sync DB with Models
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
+INFO:     192.168.72.1:59025 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59030 - "GET /assets/entry.client-BhYnB2BU.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59031 - "GET /assets/chunk-NISHYRIK-CgksP-ke.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59025 - "GET /assets/manifest-0f54b3bf.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59032 - "GET /assets/preload-helper-BhQ1_4_d.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59033 - "GET /assets/module-CWLbpm_7.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59034 - "GET /assets/index-Cfwn16jo.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59025 - "GET /assets/option-service.api-L97_35Hu.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59032 - "GET /assets/open-hands-axios-DsgPCc-0.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59031 - "GET /assets/custom-toast-handlers-B_1yfMGT.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59030 - "GET /assets/query-client-config-klXVBuR5.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59033 - "GET /assets/i18next-Lgj2Bm8L.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59034 - "GET /assets/index-DJ6Yt2gU.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59025 - "GET /assets/declaration-Bit9ak4w.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59031 - "GET /assets/retrieve-axios-error-message-CYr77e_f.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59032 - "GET /assets/infiniteQueryBehavior-D4OZgA3F.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59030 - "GET /assets/root-BjoecO9Z.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59033 - "GET /assets/root-BuxX4qZy.css HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/root-layout-Difb_FZp.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/home-L4GlV9QC.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/use-is-authed-CJdzFdqm.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/loading-spinner-yQllVgV0.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/use-config-BtaDlBUv.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/format-time-delta-C2otEd6T.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/utils-D6ZxjF6j.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/useTranslation-BhtO8iYN.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/index-H31_ZbQd.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/settings-nav-BzeErX2Q.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/openhands-logo-B-HZ0Q7q.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/tooltip-button-lSyej3eT.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/model-selector-DbwN9vh7.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/modal-backdrop-CfHRd2ER.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/settings-utils-DG0gBigV.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/base-modal-C3U1KjQl.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/brand-button-BHDigVzT.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/settings-input-CbVQHibI.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/use-save-settings-MVHDETiO.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/feature-flags-D9WjeCs2.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/use-settings-CoRyt9en.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/modal-body-GPNIXgle.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/index-DastLBCt.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/index-CQq-b-9n.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/use-tracking-BtdBimxZ.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/handle-capture-consent-DZaBHqCI.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/use-logout-BYKCwQkX.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/repo-forked-Bc3iCQ5X.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/use-balance-wP8ARcPg.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/useInfiniteQuery-DoKcZZP5.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/Trans-CSq1Url9.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/close-_PwA9ZeD.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/index-DE8uzoxy.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/server-process-BvykxQDk.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/index--ac-JUS2.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/optimistic-user-message-store-B1uFGySE.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/optional-tag-Bxe4dFfu.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/useSingleSelectListState-BWY2OVZL.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/chunk-S6H5EOGR-7oWsXA2m.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/typography-DlvioQSx.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/use-search-repositories-IJDZAyCX.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/git-service.api-Cr_L4NsR.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/middleware-BNIo_uWn.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59445 - "GET /locales/en/translation.json HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59450 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59445 - "GET /assets/index-Dh1A-npJ.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59448 - "GET /assets/features-animation-XD9s3OU2.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59449 - "GET /assets/gestures-Cs-0Bvsr.js HTTP/1.1" 200 OK
+18:33:40 - openhands.app_server.sandbox.docker_sandbox_spec_service:INFO: docker_sandbox_spec_service.py:84 - ⬇️ Pulling Docker Image: ghcr.io/openhands/agent-server:d5995c3-python
+INFO:     192.168.72.1:59445 - "GET /api/settings HTTP/1.1" 404 Not Found
+INFO:     192.168.72.1:59445 - "GET /api/options/models HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59445 - "GET /api/options/agents HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59445 - "GET /api/options/security-analyzers HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59445 - "GET /api/settings HTTP/1.1" 404 Not Found
+18:33:42 - openhands.app_server.sandbox.docker_sandbox_spec_service:INFO: docker_sandbox_spec_service.py:88 - ⬇️ Finished Pulling Docker Image: ghcr.io/openhands/agent-server:d5995c3-python
+INFO:     192.168.72.1:59449 - "GET /api/conversations?limit=10 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59548 - "GET /settings HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /locales/en/translation.json HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /assets/settings-Ca1NFCOp.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59755 - "GET /assets/llm-settings-BHKz8xI0.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59756 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /assets/input-skeleton-B51FxOGz.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59756 - "GET /assets/settings-dropdown-input-DZdwm5YR.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59755 - "GET /assets/question-circle-BYpHJBA-.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59758 - "GET /assets/key-status-icon-BD2FLF1M.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59759 - "GET /assets/switch-skeleton-DlDbJHwW.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /api/options/models HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /api/settings HTTP/1.1" 404 Not Found
+INFO:     192.168.72.1:59754 - "GET /api/options/agents HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /api/options/security-analyzers HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59879 - "GET /api/conversations?limit=10 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63654 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63655 - "GET /api/options/models HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63655 - "GET /api/options/agents HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63655 - "GET /api/options/security-analyzers HTTP/1.1" 200 OK
+18:42:54 - openhands:INFO: settings.py:177 - Updated global git configuration: name=openhands, email=openhands@all-hands.dev
+INFO:     192.168.72.1:63939 - "POST /api/settings HTTP/1.1" 200 OK
+18:42:54 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+INFO:     192.168.72.1:63939 - "GET /api/settings HTTP/1.1" 200 OK
+18:42:56 - openhands:INFO: settings.py:177 - Updated global git configuration: name=openhands, email=openhands@all-hands.dev
+INFO:     192.168.72.1:63939 - "POST /api/settings HTTP/1.1" 200 OK
+18:42:56 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+INFO:     192.168.72.1:63939 - "GET /api/settings HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63939 - "GET /api/conversations?limit=10 HTTP/1.1" 200 OK
+18:43:01 - openhands:INFO: manage_conversations.py:225 - initializing_new_conversation:repository=None git_provider=None selected_branch=None initial_user_msg=None image_urls=None replay_json=None suggested_task=None create_microagent=None conversation_instructions=None mcp_config=None
+18:43:01 - openhands:INFO: conversation_service.py:48 - New conversation ID: 10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:INFO: conversation_service.py:55 - Saving metadata for conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:INFO: conversation_service.py:85 - Creating conversation
+18:43:01 - openhands:INFO: conversation_service.py:93 - Loading settings
+18:43:01 - openhands:INFO: conversation_service.py:96 - Settings loaded
+18:43:01 - openhands:INFO: conversation_service.py:141 - Starting agent loop for conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:INFO: standalone_conversation_manager.py:288 - maybe_start_agent_loop:10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:INFO: standalone_conversation_manager.py:304 - starting_agent_loop:10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:INFO: llm_registry.py:87 - [LLM registry ac84ec4d-014d-4cca-b746-e00c3654f9dd]: Registering service for agent
+18:43:01 - openhands:INFO: conversation_service.py:160 - Finished initializing conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:WARNING: mcp_config.py:351 - No search engine API key found, skipping search engine
+18:43:01 - openhands:INFO: session.py:242 - Enabling pipeline condenser with: browser_output_masking(attention_window=2),  llm(model="gemma3:1b",  base_url="http://192.168.72.140:11434/v1",  keep_first=4, max_size=120)
+18:43:01 - openhands:INFO: llm_registry.py:87 - [LLM registry ac84ec4d-014d-4cca-b746-e00c3654f9dd]: Registering service for condenser
+INFO:     192.168.72.1:63939 - "POST /api/conversations HTTP/1.1" 200 OK
+18:43:01 - openhands:INFO: docker_runtime.py:182 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Starting runtime with image: docker.openhands.dev/openhands/runtime:0.62-nikolaik
+INFO:     192.168.72.1:63939 - "GET /assets/conversation-Dy1RaX-U.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64000 - "GET /assets/conversation-DhzMnp0v.css HTTP/1.1" 200 OK
+18:43:01 - openhands:INFO: docker_runtime.py:495 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Starting server with command: ['/openhands/micromamba/bin/micromamba', 'run', '-n', 'openhands', 'poetry', 'run', 'python', '-u', '-m', 'openhands.runtime.action_execution_server', '39759', '--working-dir', '/workspace', '--plugins', 'agent_skills', 'jupyter', 'vscode', '--username', 'root', '--user-id', '0']
+INFO:     192.168.72.1:64001 - "GET /api/conversations?limit=10 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64000 - "GET /assets/conversation-Dilx_t7Y.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63939 - "GET /assets/parse-pr-url-CyBMwwWJ.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63939 - "GET /assets/changes-tab-DPTohfKE.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64000 - "GET /assets/served-tab-BXMQe032.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64001 - "GET /assets/use-batch-sandboxes-ETOnk1UT.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63939 - "GET /assets/browser-tab-Bh1QgfBN.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64005 - "GET /assets/planner-tab-CQrOfSMt.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64004 - "GET /assets/vscode-tab-CJOAMyiH.js HTTP/1.1" 200 OK
+18:43:02 - openhands:INFO: docker_runtime.py:186 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Container started: openhands-runtime-10d0e0d2a2294c188a9c245f2862f1a3. VSCode URL: None
+18:43:02 - openhands:INFO: docker_runtime.py:197 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Waiting for client to become ready at http://host.docker.internal:39759...
+INFO:     192.168.72.1:63939 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64211 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+18:45:03 - openhands:INFO: docker_runtime.py:203 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Runtime is ready.
+INFO:     192.168.72.1:64995 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+18:45:04 - openhands:INFO: base.py:1061 - Successfully configured git: name=openhands, email=openhands@all-hands.dev
+18:45:05 - openhands:INFO: base.py:890 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Selected repo: None, loading microagents from /workspace/.openhands/microagents (inside runtime)
+18:45:05 - openhands:INFO: base.py:637 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Attempting to list files in repository microagents directory: /workspace/.openhands/microagents
+18:45:05 - openhands:INFO: memory.py:261 - Loading user workspace microagents: []
+18:45:05 - openhands:WARNING: utils.py:320 - Added microagent stdio server: fetch
+18:45:05 - openhands:INFO: action_execution_client.py:438 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Updated MCP config: []
+18:45:05 - openhands:INFO: utils.py:127 - Initializing MCP agent for url='http://host.docker.internal:39759/mcp/sse' api_key='******' with SSE connection...
+18:45:26 - openhands:INFO: client.py:57 - Connected to server with tools: ['fetch']
+18:45:26 - openhands:INFO: utils.py:127 - Initializing MCP agent for url='http://localhost:3000/mcp/mcp' api_key='******' timeout=60 with SHTTP connection...
+INFO:     127.0.0.1:51262 - "POST /mcp/mcp HTTP/1.1" 200 OK
+INFO:mcp.client.streamable_http:Negotiated protocol version: 2025-06-18
+INFO:mcp.server.streamable_http:Terminating session: None
+INFO:     127.0.0.1:51274 - "POST /mcp/mcp HTTP/1.1" 202 Accepted
+INFO:mcp.server.streamable_http:Terminating session: None
+INFO:mcp.server.lowlevel.server:Processing request of type ListToolsRequest
+INFO:     127.0.0.1:51278 - "POST /mcp/mcp HTTP/1.1" 200 OK
+INFO:mcp.server.streamable_http:Terminating session: None
+18:45:26 - openhands:INFO: client.py:57 - Connected to server with tools: ['create_pr', 'create_mr', 'create_bitbucket_pr']
+18:45:26 - openhands:INFO: utils.py:334 - Loaded 4 MCP tools: ['fetch', 'create_pr', 'create_mr', 'create_bitbucket_pr']
+18:45:26 - openhands:INFO: agent.py:169 - Setting 4 MCP tools for agent CodeActAgent: ['fetch', 'create_pr', 'create_mr', 'create_bitbucket_pr']
+18:45:26 - openhands:INFO: agent.py:181 - Tools updated for agent CodeActAgent, total 11: ['execute_bash', 'think', 'finish', 'browser', 'execute_ipython_cell', 'task_tracker', 'str_replace_editor', 'fetch', 'create_pr', 'create_mr', 'create_bitbucket_pr']
+18:45:26 - openhands:INFO: state_tracker.py:94 - AgentController 10d0e0d2a2294c188a9c245f2862f1a3 - created new state. start_id: 0
+18:45:26 - openhands:INFO: agent_session.py:216 - Agent session start succeeded in 144.81901741027832s
+18:45:26 - openhands:INFO: agent_controller.py:668 - [Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] Setting agent(CodeActAgent) state from AgentState.LOADING to AgentState.AWAITING_USER_INPUT
+18:45:26 - openhands:INFO: conversation_stats.py:65 - Saved conversation stats
+18:45:26 - OBSERVATION
+[Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] AgentStateChangedObservation(content='', agent_state='awaiting_user_input', reason='', observation=<ObservationType.AGENT_STATE_CHANGED: 'agent_state_changed'>)
+INFO:     192.168.72.1:65455 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+/app/.venv/lib/python3.13/site-packages/websockets/legacy/server.py:1178: DeprecationWarning: remove second argument of ws_handler
+  warnings.warn("remove second argument of ws_handler", DeprecationWarning)
+INFO:     192.168.72.1:65456 - "WebSocket /socket.io/?latest_event_id=-1&conversation_id=10d0e0d2a2294c188a9c245f2862f1a3&providers_set=&session_api_key=null&EIO=4&transport=websocket" [accepted]
+INFO:     connection open
+18:45:38 - openhands:INFO: listen_socket.py:38 - sio:connect: 0tqDsBU3kul6gZpPAAAB
+18:45:38 - openhands:INFO: listen_socket.py:49 - Socket request for conversation 10d0e0d2a2294c188a9c245f2862f1a3 with connection_id 0tqDsBU3kul6gZpPAAAB
+18:45:38 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+18:45:38 - openhands:INFO: listen_socket.py:74 - User None is allowed to connect to conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:45:38 - openhands:INFO: listen_socket.py:88 - Replaying event stream for conversation 10d0e0d2a2294c188a9c245f2862f1a3 with connection_id 0tqDsBU3kul6gZpPAAAB...
+18:45:38 - openhands:INFO: listen_socket.py:116 - Finished replaying event stream for conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:45:38 - openhands:INFO: conversation_service.py:255 - No provider_tokens provided, creating scaffold for: []
+18:45:38 - openhands:INFO: conversation_service.py:260 - Git provider scaffold: {}
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:158 - join_conversation:10d0e0d2a2294c188a9c245f2862f1a3:0tqDsBU3kul6gZpPAAAB
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:288 - maybe_start_agent_loop:10d0e0d2a2294c188a9c245f2862f1a3
+18:45:38 - openhands:INFO: listen_socket.py:134 - Successfully joined conversation 10d0e0d2a2294c188a9c245f2862f1a3 with connection_id 0tqDsBU3kul6gZpPAAAB
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:144 - ServerConversation 10d0e0d2a2294c188a9c245f2862f1a3 connected in 0.008533477783203125 seconds
+18:45:38 - openhands:INFO: files.py:238 - Getting git changes in /workspace
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:103 - Reusing active conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:103 - Reusing active conversation 10d0e0d2a2294c188a9c245f2862f1a3
+INFO:     192.168.72.1:65461 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/vscode-url HTTP/1.1" 200 OK
+INFO:     192.168.72.1:65460 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/web-hosts HTTP/1.1" 200 OK
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:103 - Reusing active conversation 10d0e0d2a2294c188a9c245f2862f1a3
+INFO:     192.168.72.1:65455 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:65459 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/git/changes HTTP/1.1" 200 OK
+root@a1:~#
