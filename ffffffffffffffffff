@@ -1,0 +1,700 @@
+
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.8.0-83-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Fri Nov 28 06:26:58 PM UTC 2025
+
+  System load:  0.48               Processes:              255
+  Usage of /:   84.6% of 29.36GB   Users logged in:        2
+  Memory usage: 14%                IPv4 address for ens33: 192.168.72.140
+  Swap usage:   0%
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+
+Expanded Security Maintenance for Applications is not enabled.
+
+76 updates can be applied immediately.
+42 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your           Internet connection or proxy settings
+
+
+Last login: Fri Nov 28 18:23:37 2025 from 192.168.72.1
+root@a1:~# docker images
+REPOSITORY                                    TAG              IMAGE ID       CREATED       SIZE
+ollama/ollama                                 latest           0dc6f618ef68   8 days ago    3.75GB
+docker.openhands.dev/openhands/runtime        0.62-nikolaik    dc8b6bda02af   2 weeks ago   9.38GB
+docker.openhands.dev/openhands/openhands      0.62             683d22d1e1d2   2 weeks ago   1.35GB
+docker.openhands.dev/openhands/agent-server   d5995c3-python   edd5502551d5   3 weeks ago   3.22GB
+root@a1:~# docker pull docker.openhands.dev/openhands/runtime:0.62-nikolaik
+0.62-nikolaik: Pulling from openhands/runtime
+Digest: sha256:95fc4d8e753f41d34cd564e78d3d64217c5d22296ea1cb7bf92614c8198de8f5
+Status: Image is up to date for docker.openhands.dev/openhands/runtime:0.62-nikolaik
+docker.openhands.dev/openhands/runtime:0.62-nikolaik
+root@a1:~# docker run -it --rm \
+    -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.openhands.dev/openhands/runtime:0.62-nikolaik \
+    -e LOG_ALL_EVENTS=true \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v ~/.openhands:/.openhands \
+    -p 3000:3000 \
+    --add-host host.docker.internal:host-gateway \
+    --name openhands-app \
+    docker.openhands.dev/openhands/openhands:0.62
+Starting OpenHands...
+Running OpenHands as root
+18:32:25 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+18:32:25 - openhands:INFO: server_config.py:55 - Using config class None
+/app/.venv/lib/python3.13/site-packages/fastmcp/server/server.py:255: DeprecationWarning: Providing `stateless_http` when creating a server is deprecated. Provide it when calling `run` or as a global setting instead.
+  self._handle_deprecated_settings(
+INFO:     Started server process [8]
+INFO:     Waiting for application startup.
+INFO:mcp.server.streamable_http_manager:StreamableHTTP session manager started
+INFO:alembic.runtime.migration:Context impl SQLiteImpl.
+INFO:alembic.runtime.migration:Will assume non-transactional DDL.
+INFO:alembic.runtime.migration:Running upgrade  -> 001, Sync DB with Models
+INFO:alembic.runtime.migration:Running upgrade 001 -> 002, Sync DB with Models
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
+INFO:     192.168.72.1:59025 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59030 - "GET /assets/entry.client-BhYnB2BU.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59031 - "GET /assets/chunk-NISHYRIK-CgksP-ke.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59025 - "GET /assets/manifest-0f54b3bf.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59032 - "GET /assets/preload-helper-BhQ1_4_d.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59033 - "GET /assets/module-CWLbpm_7.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59034 - "GET /assets/index-Cfwn16jo.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59025 - "GET /assets/option-service.api-L97_35Hu.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59032 - "GET /assets/open-hands-axios-DsgPCc-0.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59031 - "GET /assets/custom-toast-handlers-B_1yfMGT.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59030 - "GET /assets/query-client-config-klXVBuR5.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59033 - "GET /assets/i18next-Lgj2Bm8L.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59034 - "GET /assets/index-DJ6Yt2gU.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59025 - "GET /assets/declaration-Bit9ak4w.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59031 - "GET /assets/retrieve-axios-error-message-CYr77e_f.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59032 - "GET /assets/infiniteQueryBehavior-D4OZgA3F.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59030 - "GET /assets/root-BjoecO9Z.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59033 - "GET /assets/root-BuxX4qZy.css HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/root-layout-Difb_FZp.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/home-L4GlV9QC.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/use-is-authed-CJdzFdqm.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/loading-spinner-yQllVgV0.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/use-config-BtaDlBUv.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/format-time-delta-C2otEd6T.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/utils-D6ZxjF6j.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/useTranslation-BhtO8iYN.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/index-H31_ZbQd.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/settings-nav-BzeErX2Q.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/openhands-logo-B-HZ0Q7q.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/tooltip-button-lSyej3eT.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/model-selector-DbwN9vh7.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/modal-backdrop-CfHRd2ER.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/settings-utils-DG0gBigV.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/base-modal-C3U1KjQl.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/brand-button-BHDigVzT.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/settings-input-CbVQHibI.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/use-save-settings-MVHDETiO.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/feature-flags-D9WjeCs2.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/use-settings-CoRyt9en.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/modal-body-GPNIXgle.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/index-DastLBCt.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/index-CQq-b-9n.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/use-tracking-BtdBimxZ.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/handle-capture-consent-DZaBHqCI.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/use-logout-BYKCwQkX.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/repo-forked-Bc3iCQ5X.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/use-balance-wP8ARcPg.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/useInfiniteQuery-DoKcZZP5.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/Trans-CSq1Url9.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/close-_PwA9ZeD.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/index-DE8uzoxy.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/server-process-BvykxQDk.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/index--ac-JUS2.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/optimistic-user-message-store-B1uFGySE.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59140 - "GET /assets/optional-tag-Bxe4dFfu.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/useSingleSelectListState-BWY2OVZL.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59138 - "GET /assets/chunk-S6H5EOGR-7oWsXA2m.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59142 - "GET /assets/typography-DlvioQSx.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59141 - "GET /assets/use-search-repositories-IJDZAyCX.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59139 - "GET /assets/git-service.api-Cr_L4NsR.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59136 - "GET /assets/middleware-BNIo_uWn.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59445 - "GET /locales/en/translation.json HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59450 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59445 - "GET /assets/index-Dh1A-npJ.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59448 - "GET /assets/features-animation-XD9s3OU2.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59449 - "GET /assets/gestures-Cs-0Bvsr.js HTTP/1.1" 200 OK
+18:33:40 - openhands.app_server.sandbox.docker_sandbox_spec_service:INFO: docker_sandbox_spec_service.py:84 - ⬇️ Pulling Docker Image: ghcr.io/openhands/agent-server:d5995c3-python
+INFO:     192.168.72.1:59445 - "GET /api/settings HTTP/1.1" 404 Not Found
+INFO:     192.168.72.1:59445 - "GET /api/options/models HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59445 - "GET /api/options/agents HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59445 - "GET /api/options/security-analyzers HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59445 - "GET /api/settings HTTP/1.1" 404 Not Found
+18:33:42 - openhands.app_server.sandbox.docker_sandbox_spec_service:INFO: docker_sandbox_spec_service.py:88 - ⬇️ Finished Pulling Docker Image: ghcr.io/openhands/agent-server:d5995c3-python
+INFO:     192.168.72.1:59449 - "GET /api/conversations?limit=10 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59548 - "GET /settings HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /locales/en/translation.json HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /assets/settings-Ca1NFCOp.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59755 - "GET /assets/llm-settings-BHKz8xI0.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59756 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /assets/input-skeleton-B51FxOGz.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59756 - "GET /assets/settings-dropdown-input-DZdwm5YR.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59755 - "GET /assets/question-circle-BYpHJBA-.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59758 - "GET /assets/key-status-icon-BD2FLF1M.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59759 - "GET /assets/switch-skeleton-DlDbJHwW.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /api/options/models HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /api/settings HTTP/1.1" 404 Not Found
+INFO:     192.168.72.1:59754 - "GET /api/options/agents HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59754 - "GET /api/options/security-analyzers HTTP/1.1" 200 OK
+INFO:     192.168.72.1:59879 - "GET /api/conversations?limit=10 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63654 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63655 - "GET /api/options/models HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63655 - "GET /api/options/agents HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63655 - "GET /api/options/security-analyzers HTTP/1.1" 200 OK
+18:42:54 - openhands:INFO: settings.py:177 - Updated global git configuration: name=openhands, email=openhands@all-hands.dev
+INFO:     192.168.72.1:63939 - "POST /api/settings HTTP/1.1" 200 OK
+18:42:54 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+INFO:     192.168.72.1:63939 - "GET /api/settings HTTP/1.1" 200 OK
+18:42:56 - openhands:INFO: settings.py:177 - Updated global git configuration: name=openhands, email=openhands@all-hands.dev
+INFO:     192.168.72.1:63939 - "POST /api/settings HTTP/1.1" 200 OK
+18:42:56 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+INFO:     192.168.72.1:63939 - "GET /api/settings HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63939 - "GET /api/conversations?limit=10 HTTP/1.1" 200 OK
+18:43:01 - openhands:INFO: manage_conversations.py:225 - initializing_new_conversation:repository=None git_provider=None selected_branch=None initial_user_msg=None image_urls=None replay_json=None suggested_task=None create_microagent=None conversation_instructions=None mcp_config=None
+18:43:01 - openhands:INFO: conversation_service.py:48 - New conversation ID: 10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:INFO: conversation_service.py:55 - Saving metadata for conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:INFO: conversation_service.py:85 - Creating conversation
+18:43:01 - openhands:INFO: conversation_service.py:93 - Loading settings
+18:43:01 - openhands:INFO: conversation_service.py:96 - Settings loaded
+18:43:01 - openhands:INFO: conversation_service.py:141 - Starting agent loop for conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:INFO: standalone_conversation_manager.py:288 - maybe_start_agent_loop:10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:INFO: standalone_conversation_manager.py:304 - starting_agent_loop:10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:INFO: llm_registry.py:87 - [LLM registry ac84ec4d-014d-4cca-b746-e00c3654f9dd]: Registering service for agent
+18:43:01 - openhands:INFO: conversation_service.py:160 - Finished initializing conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:43:01 - openhands:WARNING: mcp_config.py:351 - No search engine API key found, skipping search engine
+18:43:01 - openhands:INFO: session.py:242 - Enabling pipeline condenser with: browser_output_masking(attention_window=2),  llm(model="gemma3:1b",  base_url="http://192.168.72.140:11434/v1",  keep_first=4, max_size=120)
+18:43:01 - openhands:INFO: llm_registry.py:87 - [LLM registry ac84ec4d-014d-4cca-b746-e00c3654f9dd]: Registering service for condenser
+INFO:     192.168.72.1:63939 - "POST /api/conversations HTTP/1.1" 200 OK
+18:43:01 - openhands:INFO: docker_runtime.py:182 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Starting runtime with image: docker.openhands.dev/openhands/runtime:0.62-nikolaik
+INFO:     192.168.72.1:63939 - "GET /assets/conversation-Dy1RaX-U.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64000 - "GET /assets/conversation-DhzMnp0v.css HTTP/1.1" 200 OK
+18:43:01 - openhands:INFO: docker_runtime.py:495 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Starting server with command: ['/openhands/micromamba/bin/micromamba', 'run', '-n', 'openhands', 'poetry', 'run', 'python', '-u', '-m', 'openhands.runtime.action_execution_server', '39759', '--working-dir', '/workspace', '--plugins', 'agent_skills', 'jupyter', 'vscode', '--username', 'root', '--user-id', '0']
+INFO:     192.168.72.1:64001 - "GET /api/conversations?limit=10 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64000 - "GET /assets/conversation-Dilx_t7Y.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63939 - "GET /assets/parse-pr-url-CyBMwwWJ.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63939 - "GET /assets/changes-tab-DPTohfKE.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64000 - "GET /assets/served-tab-BXMQe032.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64001 - "GET /assets/use-batch-sandboxes-ETOnk1UT.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:63939 - "GET /assets/browser-tab-Bh1QgfBN.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64005 - "GET /assets/planner-tab-CQrOfSMt.js HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64004 - "GET /assets/vscode-tab-CJOAMyiH.js HTTP/1.1" 200 OK
+18:43:02 - openhands:INFO: docker_runtime.py:186 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Container started: openhands-runtime-10d0e0d2a2294c188a9c245f2862f1a3. VSCode URL: None
+18:43:02 - openhands:INFO: docker_runtime.py:197 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Waiting for client to become ready at http://host.docker.internal:39759...
+INFO:     192.168.72.1:63939 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:64211 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+18:45:03 - openhands:INFO: docker_runtime.py:203 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Runtime is ready.
+INFO:     192.168.72.1:64995 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+18:45:04 - openhands:INFO: base.py:1061 - Successfully configured git: name=openhands, email=openhands@all-hands.dev
+18:45:05 - openhands:INFO: base.py:890 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Selected repo: None, loading microagents from /workspace/.openhands/microagents (inside runtime)
+18:45:05 - openhands:INFO: base.py:637 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Attempting to list files in repository microagents directory: /workspace/.openhands/microagents
+18:45:05 - openhands:INFO: memory.py:261 - Loading user workspace microagents: []
+18:45:05 - openhands:WARNING: utils.py:320 - Added microagent stdio server: fetch
+18:45:05 - openhands:INFO: action_execution_client.py:438 - [runtime 10d0e0d2a2294c188a9c245f2862f1a3] Updated MCP config: []
+18:45:05 - openhands:INFO: utils.py:127 - Initializing MCP agent for url='http://host.docker.internal:39759/mcp/sse' api_key='******' with SSE connection...
+18:45:26 - openhands:INFO: client.py:57 - Connected to server with tools: ['fetch']
+18:45:26 - openhands:INFO: utils.py:127 - Initializing MCP agent for url='http://localhost:3000/mcp/mcp' api_key='******' timeout=60 with SHTTP connection...
+INFO:     127.0.0.1:51262 - "POST /mcp/mcp HTTP/1.1" 200 OK
+INFO:mcp.client.streamable_http:Negotiated protocol version: 2025-06-18
+INFO:mcp.server.streamable_http:Terminating session: None
+INFO:     127.0.0.1:51274 - "POST /mcp/mcp HTTP/1.1" 202 Accepted
+INFO:mcp.server.streamable_http:Terminating session: None
+INFO:mcp.server.lowlevel.server:Processing request of type ListToolsRequest
+INFO:     127.0.0.1:51278 - "POST /mcp/mcp HTTP/1.1" 200 OK
+INFO:mcp.server.streamable_http:Terminating session: None
+18:45:26 - openhands:INFO: client.py:57 - Connected to server with tools: ['create_pr', 'create_mr', 'create_bitbucket_pr']
+18:45:26 - openhands:INFO: utils.py:334 - Loaded 4 MCP tools: ['fetch', 'create_pr', 'create_mr', 'create_bitbucket_pr']
+18:45:26 - openhands:INFO: agent.py:169 - Setting 4 MCP tools for agent CodeActAgent: ['fetch', 'create_pr', 'create_mr', 'create_bitbucket_pr']
+18:45:26 - openhands:INFO: agent.py:181 - Tools updated for agent CodeActAgent, total 11: ['execute_bash', 'think', 'finish', 'browser', 'execute_ipython_cell', 'task_tracker', 'str_replace_editor', 'fetch', 'create_pr', 'create_mr', 'create_bitbucket_pr']
+18:45:26 - openhands:INFO: state_tracker.py:94 - AgentController 10d0e0d2a2294c188a9c245f2862f1a3 - created new state. start_id: 0
+18:45:26 - openhands:INFO: agent_session.py:216 - Agent session start succeeded in 144.81901741027832s
+18:45:26 - openhands:INFO: agent_controller.py:668 - [Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] Setting agent(CodeActAgent) state from AgentState.LOADING to AgentState.AWAITING_USER_INPUT
+18:45:26 - openhands:INFO: conversation_stats.py:65 - Saved conversation stats
+18:45:26 - OBSERVATION
+[Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] AgentStateChangedObservation(content='', agent_state='awaiting_user_input', reason='', observation=<ObservationType.AGENT_STATE_CHANGED: 'agent_state_changed'>)
+INFO:     192.168.72.1:65455 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+/app/.venv/lib/python3.13/site-packages/websockets/legacy/server.py:1178: DeprecationWarning: remove second argument of ws_handler
+  warnings.warn("remove second argument of ws_handler", DeprecationWarning)
+INFO:     192.168.72.1:65456 - "WebSocket /socket.io/?latest_event_id=-1&conversation_id=10d0e0d2a2294c188a9c245f2862f1a3&providers_set=&session_api_key=null&EIO=4&transport=websocket" [accepted]
+INFO:     connection open
+18:45:38 - openhands:INFO: listen_socket.py:38 - sio:connect: 0tqDsBU3kul6gZpPAAAB
+18:45:38 - openhands:INFO: listen_socket.py:49 - Socket request for conversation 10d0e0d2a2294c188a9c245f2862f1a3 with connection_id 0tqDsBU3kul6gZpPAAAB
+18:45:38 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+18:45:38 - openhands:INFO: listen_socket.py:74 - User None is allowed to connect to conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:45:38 - openhands:INFO: listen_socket.py:88 - Replaying event stream for conversation 10d0e0d2a2294c188a9c245f2862f1a3 with connection_id 0tqDsBU3kul6gZpPAAAB...
+18:45:38 - openhands:INFO: listen_socket.py:116 - Finished replaying event stream for conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:45:38 - openhands:INFO: conversation_service.py:255 - No provider_tokens provided, creating scaffold for: []
+18:45:38 - openhands:INFO: conversation_service.py:260 - Git provider scaffold: {}
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:158 - join_conversation:10d0e0d2a2294c188a9c245f2862f1a3:0tqDsBU3kul6gZpPAAAB
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:288 - maybe_start_agent_loop:10d0e0d2a2294c188a9c245f2862f1a3
+18:45:38 - openhands:INFO: listen_socket.py:134 - Successfully joined conversation 10d0e0d2a2294c188a9c245f2862f1a3 with connection_id 0tqDsBU3kul6gZpPAAAB
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:144 - ServerConversation 10d0e0d2a2294c188a9c245f2862f1a3 connected in 0.008533477783203125 seconds
+18:45:38 - openhands:INFO: files.py:238 - Getting git changes in /workspace
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:103 - Reusing active conversation 10d0e0d2a2294c188a9c245f2862f1a3
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:103 - Reusing active conversation 10d0e0d2a2294c188a9c245f2862f1a3
+INFO:     192.168.72.1:65461 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/vscode-url HTTP/1.1" 200 OK
+INFO:     192.168.72.1:65460 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/web-hosts HTTP/1.1" 200 OK
+18:45:38 - openhands:INFO: standalone_conversation_manager.py:103 - Reusing active conversation 10d0e0d2a2294c188a9c245f2862f1a3
+INFO:     192.168.72.1:65455 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:65459 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/git/changes HTTP/1.1" 200 OK
+INFO:     192.168.72.1:50523 - "GET /api/options/config HTTP/1.1" 200 OK
+18:48:04 - openhands:INFO: standalone_conversation_manager.py:144 - ServerConversation 10d0e0d2a2294c188a9c245f2862f1a3 connected in 0.0011568069458007812 seconds
+18:48:04 - openhands:INFO: standalone_conversation_manager.py:112 - Reusing detached conversation 10d0e0d2a2294c188a9c245f2862f1a3
+INFO:     192.168.72.1:50525 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/vscode-url HTTP/1.1" 200 OK
+INFO:     192.168.72.1:50524 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/web-hosts HTTP/1.1" 200 OK
+INFO:     192.168.72.1:50585 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:50879 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+18:48:45 - USER_ACTION
+[Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] **MessageAction** (source=EventSource.USER)
+CONTENT: Напиши Java-приложение, которое логирует SQL-запросы на TCP порту PostgreSQL
+18:48:45 - openhands:INFO: agent_controller.py:668 - [Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] Setting agent(CodeActAgent) state from AgentState.AWAITING_USER_INPUT to AgentState.RUNNING
+18:48:45 - openhands:INFO: llm_registry.py:61 - extraneous completion: conversation_title_creator
+18:48:45 - openhands:INFO: conversation_stats.py:65 - Saved conversation stats
+18:48:45 - OBSERVATION
+[Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] AgentStateChangedObservation(content='', agent_state='running', reason='', observation=<ObservationType.AGENT_STATE_CHANGED: 'agent_state_changed'>)
+18:48:45 - OBSERVATION
+[Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] **RecallObservation**
+recall_type=RecallType.WORKSPACE_CONTEXT, repo_name=, repo_instructions=..., runtime_hosts={'http://localhost:53257': 53257, 'http://localhost:56687': 56687}, additional_agent_instructions=..., date=2025-11-28custom_secrets_descriptions={}, conversation_instructions=...
+18:48:45 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+INFO:     192.168.72.1:50879 - "GET /api/settings HTTP/1.1" 200 OK
+18:48:45 - openhands:ERROR: agent_controller.py:375 - [Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] Error while running the agent (session ID: 10d0e0d2a2294c188a9c245f2862f1a3): litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gemma3:1b
+ Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers
+Traceback (most recent call last):
+  File "/app/openhands/controller/agent_controller.py", line 373, in _step_with_exception_handling
+    await self._step()
+  File "/app/openhands/controller/agent_controller.py", line 948, in _step
+    raise e
+  File "/app/openhands/controller/agent_controller.py", line 901, in _step
+    action = self.agent.step(self.state)
+  File "/app/openhands/agenthub/codeact_agent/codeact_agent.py", line 219, in step
+    response = self.llm.completion(**params)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 338, in wrapped_f
+    return copy(f, *args, **kw)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 477, in __call__
+    do = self.iter(retry_state=retry_state)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 378, in iter
+    result = action(retry_state)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 400, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ~~~~~~~~~~~~~~~~~^^
+  File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 480, in __call__
+    result = fn(*args, **kwargs)
+  File "/app/openhands/llm/llm.py", line 338, in wrapper
+    resp: ModelResponse = self._completion_unwrapped(*args, **kwargs)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/litellm/utils.py", line 1356, in wrapper
+    raise e
+  File "/app/.venv/lib/python3.13/site-packages/litellm/utils.py", line 1231, in wrapper
+    result = original_function(*args, **kwargs)
+  File "/app/.venv/lib/python3.13/site-packages/litellm/main.py", line 3733, in completion
+    raise exception_type(
+    ...<5 lines>...
+    )
+  File "/app/.venv/lib/python3.13/site-packages/litellm/main.py", line 1146, in completion
+    model, custom_llm_provider, dynamic_api_key, api_base = get_llm_provider(
+                                                            ~~~~~~~~~~~~~~~~^
+        model=model,
+        ^^^^^^^^^^^^
+    ...<2 lines>...
+        api_key=api_key,
+        ^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py", line 418, in get_llm_provider
+    raise e
+  File "/app/.venv/lib/python3.13/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py", line 395, in get_llm_provider
+    raise litellm.exceptions.BadRequestError(  # type: ignore
+    ...<8 lines>...
+    )
+litellm.exceptions.BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gemma3:1b
+ Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers
+18:48:45 - openhands:ERROR: conversation_summary.py:64 - Error generating conversation title: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gemma3:1b
+ Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers
+18:48:45 - openhands:INFO: agent_controller.py:668 - [Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] Setting agent(CodeActAgent) state from AgentState.RUNNING to AgentState.ERROR
+18:48:45 - openhands:INFO: conversation_summary.py:144 - Generated title using truncation: Напиши Java-приложение, которо...
+18:48:45 - openhands:INFO: agent_controller.py:668 - [Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] Setting agent(CodeActAgent) state from AgentState.ERROR to AgentState.ERROR
+18:48:45 - openhands:ERROR: session.py:445 - Agent status error: BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gemma3:1b
+ Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers
+18:48:45 - openhands:ERROR: session.py:345 - Agent status error: BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gemma3:1b
+ Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers
+18:48:45 - openhands:INFO: conversation_stats.py:65 - Saved conversation stats
+18:48:45 - OBSERVATION
+[Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] AgentStateChangedObservation(content='', agent_state='error', reason="BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gemma3:1b\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers", observation=<ObservationType.AGENT_STATE_CHANGED: 'agent_state_changed'>)
+INFO:     192.168.72.1:50879 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52129 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52131 - "GET /api/options/models HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52130 - "GET /api/conversations?limit=10 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52131 - "GET /api/options/agents HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52131 - "GET /api/options/security-analyzers HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52131 - "GET /api/conversations?limit=10 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52131 - "GET /settings HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52279 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52286 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52286 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52352 - "GET /settings HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52580 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52580 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52772 - "GET /locales/en/translation.json HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52772 - "GET /api/options/models HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52772 - "GET /api/options/agents HTTP/1.1" 200 OK
+INFO:     192.168.72.1:52772 - "GET /api/options/security-analyzers HTTP/1.1" 200 OK
+18:52:13 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+INFO:     192.168.72.1:52772 - "GET /api/settings HTTP/1.1" 200 OK
+18:52:43 - openhands:INFO: settings.py:177 - Updated global git configuration: name=openhands, email=openhands@all-hands.dev
+INFO:     192.168.72.1:53018 - "POST /api/settings HTTP/1.1" 200 OK
+18:52:43 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+INFO:     192.168.72.1:53018 - "GET /api/settings HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53073 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3 HTTP/1.1" 200 OK
+18:53:02 - USER_ACTION
+[Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] **MessageAction** (source=EventSource.USER)
+CONTENT: Напиши Java-приложение, которое логирует SQL-запросы на TCP порту PostgreSQL
+18:53:02 - openhands:INFO: agent_controller.py:668 - [Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] Setting agent(CodeActAgent) state from AgentState.ERROR to AgentState.RUNNING
+18:53:02 - openhands:INFO: conversation_stats.py:65 - Saved conversation stats
+18:53:02 - OBSERVATION
+[Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] NullObservation(content='', observation=<ObservationType.NULL: 'null'>)
+18:53:02 - openhands:ERROR: agent_controller.py:375 - [Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] Error while running the agent (session ID: 10d0e0d2a2294c188a9c245f2862f1a3): litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gemma3:1b
+ Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers
+Traceback (most recent call last):
+  File "/app/openhands/controller/agent_controller.py", line 373, in _step_with_exception_handling
+    await self._step()
+  File "/app/openhands/controller/agent_controller.py", line 948, in _step
+    raise e
+  File "/app/openhands/controller/agent_controller.py", line 901, in _step
+    action = self.agent.step(self.state)
+  File "/app/openhands/agenthub/codeact_agent/codeact_agent.py", line 219, in step
+    response = self.llm.completion(**params)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 338, in wrapped_f
+    return copy(f, *args, **kw)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 477, in __call__
+    do = self.iter(retry_state=retry_state)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 378, in iter
+    result = action(retry_state)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 400, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ~~~~~~~~~~~~~~~~~^^
+  File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 480, in __call__
+    result = fn(*args, **kwargs)
+  File "/app/openhands/llm/llm.py", line 338, in wrapper
+    resp: ModelResponse = self._completion_unwrapped(*args, **kwargs)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/litellm/utils.py", line 1356, in wrapper
+    raise e
+  File "/app/.venv/lib/python3.13/site-packages/litellm/utils.py", line 1231, in wrapper
+    result = original_function(*args, **kwargs)
+  File "/app/.venv/lib/python3.13/site-packages/litellm/main.py", line 3733, in completion
+    raise exception_type(
+    ...<5 lines>...
+    )
+  File "/app/.venv/lib/python3.13/site-packages/litellm/main.py", line 1146, in completion
+    model, custom_llm_provider, dynamic_api_key, api_base = get_llm_provider(
+                                                            ~~~~~~~~~~~~~~~~^
+        model=model,
+        ^^^^^^^^^^^^
+    ...<2 lines>...
+        api_key=api_key,
+        ^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py", line 418, in get_llm_provider
+    raise e
+  File "/app/.venv/lib/python3.13/site-packages/litellm/litellm_core_utils/get_llm_provider_logic.py", line 395, in get_llm_provider
+    raise litellm.exceptions.BadRequestError(  # type: ignore
+    ...<8 lines>...
+    )
+litellm.exceptions.BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gemma3:1b
+ Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers
+18:53:02 - openhands:INFO: agent_controller.py:668 - [Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] Setting agent(CodeActAgent) state from AgentState.RUNNING to AgentState.ERROR
+18:53:02 - openhands:INFO: agent_controller.py:668 - [Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] Setting agent(CodeActAgent) state from AgentState.ERROR to AgentState.ERROR
+18:53:02 - openhands:ERROR: session.py:445 - Agent status error: BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gemma3:1b
+ Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers
+18:53:02 - openhands:ERROR: session.py:345 - Agent status error: BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gemma3:1b
+ Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers
+18:53:02 - openhands:INFO: conversation_stats.py:65 - Saved conversation stats
+18:53:02 - OBSERVATION
+[Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] AgentStateChangedObservation(content='', agent_state='running', reason='', observation=<ObservationType.AGENT_STATE_CHANGED: 'agent_state_changed'>)
+18:53:02 - OBSERVATION
+[Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] AgentStateChangedObservation(content='', agent_state='error', reason="BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=gemma3:1b\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers", observation=<ObservationType.AGENT_STATE_CHANGED: 'agent_state_changed'>)
+18:53:02 - openhands:INFO: standalone_conversation_manager.py:144 - ServerConversation 10d0e0d2a2294c188a9c245f2862f1a3 connected in 0.0010001659393310547 seconds
+18:53:02 - openhands:INFO: files.py:238 - Getting git changes in /workspace
+18:53:02 - openhands:INFO: standalone_conversation_manager.py:103 - Reusing active conversation 10d0e0d2a2294c188a9c245f2862f1a3
+INFO:     192.168.72.1:53205 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/vscode-url HTTP/1.1" 200 OK
+18:53:02 - openhands:INFO: standalone_conversation_manager.py:103 - Reusing active conversation 10d0e0d2a2294c188a9c245f2862f1a3
+INFO:     192.168.72.1:53204 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/web-hosts HTTP/1.1" 200 OK
+18:53:02 - openhands:INFO: standalone_conversation_manager.py:103 - Reusing active conversation 10d0e0d2a2294c188a9c245f2862f1a3
+INFO:     192.168.72.1:53203 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53201 - "GET /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/git/changes HTTP/1.1" 200 OK
+18:53:05 - openhands:INFO: listen_socket.py:157 - sio:disconnect:0tqDsBU3kul6gZpPAAAB
+18:53:05 - openhands:INFO: standalone_conversation_manager.py:399 - disconnect_from_session:0tqDsBU3kul6gZpPAAAB:10d0e0d2a2294c188a9c245f2862f1a3
+INFO:     connection closed
+INFO:     192.168.72.1:53205 - "GET /api/options/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53204 - "GET /api/conversations?limit=10 HTTP/1.1" 200 OK
+18:53:06 - openhands:INFO: manage_conversations.py:225 - initializing_new_conversation:repository=None git_provider=None selected_branch=None initial_user_msg=None image_urls=None replay_json=None suggested_task=None create_microagent=None conversation_instructions=None mcp_config=None
+18:53:06 - openhands:INFO: conversation_service.py:48 - New conversation ID: 00591de9f3c748f397f6f14f90cef3b8
+18:53:06 - openhands:INFO: conversation_service.py:55 - Saving metadata for conversation 00591de9f3c748f397f6f14f90cef3b8
+18:53:06 - openhands:INFO: conversation_service.py:85 - Creating conversation
+18:53:06 - openhands:INFO: conversation_service.py:93 - Loading settings
+18:53:06 - openhands:INFO: conversation_service.py:96 - Settings loaded
+18:53:06 - openhands:INFO: conversation_service.py:141 - Starting agent loop for conversation 00591de9f3c748f397f6f14f90cef3b8
+18:53:06 - openhands:INFO: standalone_conversation_manager.py:288 - maybe_start_agent_loop:00591de9f3c748f397f6f14f90cef3b8
+18:53:06 - openhands:INFO: standalone_conversation_manager.py:304 - starting_agent_loop:00591de9f3c748f397f6f14f90cef3b8
+18:53:06 - openhands:INFO: llm_registry.py:87 - [LLM registry bc910f5d-1e62-47b3-8de9-d871b74983dc]: Registering service for agent
+18:53:06 - openhands:INFO: conversation_service.py:160 - Finished initializing conversation 00591de9f3c748f397f6f14f90cef3b8
+18:53:06 - openhands:WARNING: mcp_config.py:351 - No search engine API key found, skipping search engine
+18:53:06 - openhands:INFO: session.py:242 - Enabling pipeline condenser with: browser_output_masking(attention_window=2),  llm(model="ollama/gemma3:1b",  base_url="http://192.168.72.140:11434/v1",  keep_first=4, max_size=120)
+18:53:06 - openhands:INFO: llm_registry.py:87 - [LLM registry bc910f5d-1e62-47b3-8de9-d871b74983dc]: Registering service for condenser
+INFO:     192.168.72.1:53204 - "POST /api/conversations HTTP/1.1" 200 OK
+18:53:09 - openhands:INFO: docker_runtime.py:182 - [runtime 00591de9f3c748f397f6f14f90cef3b8] Starting runtime with image: docker.openhands.dev/openhands/runtime:0.62-nikolaik
+INFO:     192.168.72.1:53204 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+18:53:10 - openhands:INFO: docker_runtime.py:495 - [runtime 00591de9f3c748f397f6f14f90cef3b8] Starting server with command: ['/openhands/micromamba/bin/micromamba', 'run', '-n', 'openhands', 'poetry', 'run', 'python', '-u', '-m', 'openhands.runtime.action_execution_server', '30128', '--working-dir', '/workspace', '--plugins', 'agent_skills', 'jupyter', 'vscode', '--username', 'root', '--user-id', '0']
+INFO:     192.168.72.1:53204 - "GET /api/conversations?limit=20 HTTP/1.1" 200 OK
+18:53:13 - openhands:INFO: docker_runtime.py:186 - [runtime 00591de9f3c748f397f6f14f90cef3b8] Container started: openhands-runtime-00591de9f3c748f397f6f14f90cef3b8. VSCode URL: None
+18:53:13 - openhands:INFO: docker_runtime.py:197 - [runtime 00591de9f3c748f397f6f14f90cef3b8] Waiting for client to become ready at http://host.docker.internal:30128...
+INFO:     192.168.72.1:53204 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53204 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+18:53:19 - openhands:INFO: manage_conversations.py:732 - Stopping conversation: 10d0e0d2a2294c188a9c245f2862f1a3
+18:53:19 - openhands:INFO: standalone_conversation_manager.py:430 - _close_session:10d0e0d2a2294c188a9c245f2862f1a3
+18:53:19 - openhands:INFO: standalone_conversation_manager.py:438 - removing connections: []
+18:53:19 - openhands:INFO: standalone_conversation_manager.py:452 - closing_session:10d0e0d2a2294c188a9c245f2862f1a3
+18:53:19 - openhands:INFO: conversation_stats.py:65 - Saved conversation stats
+18:53:19 - openhands:INFO: agent_controller.py:668 - [Agent Controller 10d0e0d2a2294c188a9c245f2862f1a3] Setting agent(CodeActAgent) state from AgentState.ERROR to AgentState.STOPPED
+18:53:19 - openhands:INFO: conversation_stats.py:65 - Saved conversation stats
+18:53:19 - openhands:WARNING: stream.py:158 - Callback not found during unsubscribe: 10d0e0d2a2294c188a9c245f2862f1a3
+18:53:19 - openhands:INFO: standalone_conversation_manager.py:454 - closed_session:10d0e0d2a2294c188a9c245f2862f1a3
+INFO:     192.168.72.1:53204 - "POST /api/conversations/10d0e0d2a2294c188a9c245f2862f1a3/stop HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53204 - "GET /api/conversations?limit=20 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53204 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53204 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53805 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53805 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53910 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53963 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53963 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53963 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53963 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53963 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+INFO:     192.168.72.1:53963 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+18:54:51 - openhands:INFO: docker_runtime.py:203 - [runtime 00591de9f3c748f397f6f14f90cef3b8] Runtime is ready.
+18:54:52 - openhands:INFO: base.py:1061 - Successfully configured git: name=openhands, email=openhands@all-hands.dev
+INFO:     192.168.72.1:53963 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+/app/.venv/lib/python3.13/site-packages/websockets/legacy/server.py:1178: DeprecationWarning: remove second argument of ws_handler
+  warnings.warn("remove second argument of ws_handler", DeprecationWarning)
+INFO:     192.168.72.1:54119 - "WebSocket /socket.io/?latest_event_id=-1&conversation_id=00591de9f3c748f397f6f14f90cef3b8&providers_set=&session_api_key=null&EIO=4&transport=websocket" [accepted]
+INFO:     connection open
+18:54:52 - openhands:INFO: listen_socket.py:38 - sio:connect: sI_S-pubFUqvsADRAAAD
+18:54:52 - openhands:INFO: listen_socket.py:49 - Socket request for conversation 00591de9f3c748f397f6f14f90cef3b8 with connection_id sI_S-pubFUqvsADRAAAD
+18:54:52 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+18:54:52 - openhands:INFO: listen_socket.py:74 - User None is allowed to connect to conversation 00591de9f3c748f397f6f14f90cef3b8
+18:54:52 - openhands:INFO: listen_socket.py:88 - Replaying event stream for conversation 00591de9f3c748f397f6f14f90cef3b8 with connection_id sI_S-pubFUqvsADRAAAD...
+18:54:52 - openhands:INFO: listen_socket.py:116 - Finished replaying event stream for conversation 00591de9f3c748f397f6f14f90cef3b8
+18:54:52 - openhands:INFO: conversation_service.py:255 - No provider_tokens provided, creating scaffold for: []
+18:54:52 - openhands:INFO: conversation_service.py:260 - Git provider scaffold: {}
+18:54:52 - openhands:INFO: standalone_conversation_manager.py:158 - join_conversation:00591de9f3c748f397f6f14f90cef3b8:sI_S-pubFUqvsADRAAAD
+18:54:52 - openhands:INFO: standalone_conversation_manager.py:288 - maybe_start_agent_loop:00591de9f3c748f397f6f14f90cef3b8
+18:54:52 - openhands:INFO: listen_socket.py:134 - Successfully joined conversation 00591de9f3c748f397f6f14f90cef3b8 with connection_id sI_S-pubFUqvsADRAAAD
+18:54:52 - openhands:INFO: base.py:890 - [runtime 00591de9f3c748f397f6f14f90cef3b8] Selected repo: None, loading microagents from /workspace/.openhands/microagents (inside runtime)
+18:54:52 - openhands:INFO: base.py:637 - [runtime 00591de9f3c748f397f6f14f90cef3b8] Attempting to list files in repository microagents directory: /workspace/.openhands/microagents
+18:54:52 - openhands:INFO: memory.py:261 - Loading user workspace microagents: []
+18:54:52 - openhands:WARNING: utils.py:320 - Added microagent stdio server: fetch
+18:54:52 - openhands:INFO: action_execution_client.py:438 - [runtime 00591de9f3c748f397f6f14f90cef3b8] Updated MCP config: []
+18:54:52 - openhands:INFO: utils.py:127 - Initializing MCP agent for url='http://host.docker.internal:30128/mcp/sse' api_key='******' with SSE connection...
+18:55:16 - openhands:INFO: client.py:57 - Connected to server with tools: ['fetch']
+18:55:16 - openhands:INFO: utils.py:127 - Initializing MCP agent for url='http://localhost:3000/mcp/mcp' api_key='******' timeout=60 with SHTTP connection...
+INFO:     127.0.0.1:60684 - "POST /mcp/mcp HTTP/1.1" 200 OK
+INFO:mcp.client.streamable_http:Negotiated protocol version: 2025-06-18
+INFO:mcp.server.streamable_http:Terminating session: None
+INFO:     127.0.0.1:60686 - "POST /mcp/mcp HTTP/1.1" 202 Accepted
+INFO:mcp.server.streamable_http:Terminating session: None
+INFO:mcp.server.lowlevel.server:Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60696 - "POST /mcp/mcp HTTP/1.1" 200 OK
+INFO:mcp.server.streamable_http:Terminating session: None
+18:55:16 - openhands:INFO: client.py:57 - Connected to server with tools: ['create_pr', 'create_mr', 'create_bitbucket_pr']
+18:55:16 - openhands:INFO: utils.py:334 - Loaded 4 MCP tools: ['fetch', 'create_pr', 'create_mr', 'create_bitbucket_pr']
+18:55:16 - openhands:INFO: agent.py:169 - Setting 4 MCP tools for agent CodeActAgent: ['fetch', 'create_pr', 'create_mr', 'create_bitbucket_pr']
+18:55:16 - openhands:INFO: agent.py:181 - Tools updated for agent CodeActAgent, total 11: ['execute_bash', 'think', 'finish', 'browser', 'execute_ipython_cell', 'task_tracker', 'str_replace_editor', 'fetch', 'create_pr', 'create_mr', 'create_bitbucket_pr']
+18:55:16 - openhands:INFO: state_tracker.py:94 - AgentController 00591de9f3c748f397f6f14f90cef3b8 - created new state. start_id: 0
+18:55:16 - openhands:INFO: agent_session.py:216 - Agent session start succeeded in 129.82281804084778s
+18:55:16 - openhands:INFO: agent_controller.py:668 - [Agent Controller 00591de9f3c748f397f6f14f90cef3b8] Setting agent(CodeActAgent) state from AgentState.LOADING to AgentState.AWAITING_USER_INPUT
+18:55:16 - openhands:INFO: conversation_stats.py:65 - Saved conversation stats
+18:55:16 - OBSERVATION
+[Agent Controller 00591de9f3c748f397f6f14f90cef3b8] AgentStateChangedObservation(content='', agent_state='awaiting_user_input', reason='', observation=<ObservationType.AGENT_STATE_CHANGED: 'agent_state_changed'>)
+18:55:16 - openhands:INFO: standalone_conversation_manager.py:144 - ServerConversation 00591de9f3c748f397f6f14f90cef3b8 connected in 0.0005941390991210938 seconds
+18:55:16 - openhands:INFO: standalone_conversation_manager.py:112 - Reusing detached conversation 00591de9f3c748f397f6f14f90cef3b8
+18:55:16 - openhands:INFO: standalone_conversation_manager.py:112 - Reusing detached conversation 00591de9f3c748f397f6f14f90cef3b8
+18:55:16 - openhands:INFO: standalone_conversation_manager.py:112 - Reusing detached conversation 00591de9f3c748f397f6f14f90cef3b8
+18:55:16 - openhands:INFO: files.py:238 - Getting git changes in /workspace
+INFO:     192.168.72.1:54501 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8/config HTTP/1.1" 200 OK
+INFO:     192.168.72.1:54504 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8/vscode-url HTTP/1.1" 200 OK
+INFO:     192.168.72.1:54503 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8/web-hosts HTTP/1.1" 200 OK
+INFO:     192.168.72.1:54502 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8/git/changes HTTP/1.1" 200 OK
+INFO:     192.168.72.1:54502 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+18:55:23 - USER_ACTION
+[Agent Controller 00591de9f3c748f397f6f14f90cef3b8] **MessageAction** (source=EventSource.USER)
+CONTENT: Напиши Java-приложение, которое логирует SQL-запросы на TCP порту PostgreSQL
+18:55:23 - openhands:INFO: agent_controller.py:668 - [Agent Controller 00591de9f3c748f397f6f14f90cef3b8] Setting agent(CodeActAgent) state from AgentState.AWAITING_USER_INPUT to AgentState.RUNNING
+18:55:23 - openhands:INFO: llm_registry.py:61 - extraneous completion: conversation_title_creator
+18:55:23 - openhands:INFO: conversation_stats.py:65 - Saved conversation stats
+18:55:23 - OBSERVATION
+[Agent Controller 00591de9f3c748f397f6f14f90cef3b8] AgentStateChangedObservation(content='', agent_state='running', reason='', observation=<ObservationType.AGENT_STATE_CHANGED: 'agent_state_changed'>)
+18:55:23 - OBSERVATION
+[Agent Controller 00591de9f3c748f397f6f14f90cef3b8] **RecallObservation**
+recall_type=RecallType.WORKSPACE_CONTEXT, repo_name=, repo_instructions=..., runtime_hosts={'http://localhost:54343': 54343, 'http://localhost:58022': 58022}, additional_agent_instructions=..., date=2025-11-28custom_secrets_descriptions={}, conversation_instructions=...
+18:55:23 - openhands:INFO: utils.py:152 - config.toml not found: [Errno 2] No such file or directory: 'config.toml'. Toml values have not been applied.
+INFO:     192.168.72.1:54502 - "GET /api/settings HTTP/1.1" 200 OK
+18:55:23 - openhands:ERROR: retry_mixin.py:98 - litellm.APIConnectionError: OllamaException - 404 page not found. Attempt #1 | You can customize retry values in the configuration.
+18:55:23 - openhands:ERROR: retry_mixin.py:98 - litellm.APIConnectionError: OllamaException - 404 page not found. Attempt #1 | You can customize retry values in the configuration.
+18:55:32 - openhands:ERROR: retry_mixin.py:98 - litellm.APIConnectionError: OllamaException - 404 page not found. Attempt #2 | You can customize retry values in the configuration.
+18:55:32 - openhands:ERROR: retry_mixin.py:98 - litellm.APIConnectionError: OllamaException - 404 page not found. Attempt #2 | You can customize retry values in the configuration.
+18:55:48 - openhands:ERROR: retry_mixin.py:98 - litellm.APIConnectionError: OllamaException - 404 page not found. Attempt #3 | You can customize retry values in the configuration.
+18:55:48 - openhands:ERROR: retry_mixin.py:98 - litellm.APIConnectionError: OllamaException - 404 page not found. Attempt #3 | You can customize retry values in the configuration.
+18:55:51 - openhands:INFO: standalone_conversation_manager.py:144 - ServerConversation 00591de9f3c748f397f6f14f90cef3b8 connected in 0.0019106864929199219 seconds
+18:55:51 - openhands:INFO: standalone_conversation_manager.py:112 - Reusing detached conversation 00591de9f3c748f397f6f14f90cef3b8
+INFO:     192.168.72.1:54820 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8/web-hosts HTTP/1.1" 200 OK
+INFO:     192.168.72.1:54821 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8/vscode-url HTTP/1.1" 200 OK
+INFO:     192.168.72.1:54821 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+18:56:05 - openhands:INFO: standalone_conversation_manager.py:144 - ServerConversation 00591de9f3c748f397f6f14f90cef3b8 connected in 0.0004837512969970703 seconds
+INFO:     192.168.72.1:54948 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8/web-hosts HTTP/1.1" 200 OK
+18:56:05 - openhands:INFO: standalone_conversation_manager.py:112 - Reusing detached conversation 00591de9f3c748f397f6f14f90cef3b8
+INFO:     192.168.72.1:54949 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8/vscode-url HTTP/1.1" 200 OK
+18:56:11 - openhands:INFO: standalone_conversation_manager.py:112 - Reusing detached conversation 00591de9f3c748f397f6f14f90cef3b8
+INFO:     192.168.72.1:55008 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8/git/diff?path=.vscode%2Fsettings.json HTTP/1.1" 200 OK
+18:56:21 - openhands:ERROR: retry_mixin.py:98 - litellm.APIConnectionError: OllamaException - 404 page not found. Attempt #4 | You can customize retry values in the configuration.
+18:56:21 - openhands:ERROR: retry_mixin.py:98 - litellm.APIConnectionError: OllamaException - 404 page not found. Attempt #4 | You can customize retry values in the configuration.
+INFO:     192.168.72.1:55114 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+18:56:39 - openhands:INFO: standalone_conversation_manager.py:144 - ServerConversation 00591de9f3c748f397f6f14f90cef3b8 connected in 0.0021619796752929688 seconds
+INFO:     192.168.72.1:55257 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8/web-hosts HTTP/1.1" 200 OK
+18:56:39 - openhands:INFO: standalone_conversation_manager.py:112 - Reusing detached conversation 00591de9f3c748f397f6f14f90cef3b8
+INFO:     192.168.72.1:55258 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8/vscode-url HTTP/1.1" 200 OK
+18:57:26 - openhands:ERROR: conversation_summary.py:64 - Error generating conversation title: litellm.APIConnectionError: OllamaException - 404 page not found
+18:57:26 - openhands:INFO: conversation_summary.py:144 - Generated title using truncation: Напиши Java-приложение, которо...
+INFO:     192.168.72.1:55679 - "GET /api/conversations/00591de9f3c748f397f6f14f90cef3b8 HTTP/1.1" 200 OK
+18:57:26 - openhands:ERROR: agent_controller.py:375 - [Agent Controller 00591de9f3c748f397f6f14f90cef3b8] Error while running the agent (session ID: 00591de9f3c748f397f6f14f90cef3b8): litellm.APIConnectionError: OllamaException - 404 page not found
+Traceback (most recent call last):
+  File "/app/.venv/lib/python3.13/site-packages/litellm/llms/custom_httpx/llm_http_handler.py", line 183, in _make_common_sync_call
+    response = sync_httpx_client.post(
+        url=api_base,
+    ...<8 lines>...
+        logging_obj=logging_obj,
+    )
+  File "/app/.venv/lib/python3.13/site-packages/litellm/llms/custom_httpx/http_handler.py", line 802, in post
+    raise e
+  File "/app/.venv/lib/python3.13/site-packages/litellm/llms/custom_httpx/http_handler.py", line 784, in post
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/httpx/_models.py", line 829, in raise_for_status
+    raise HTTPStatusError(message, request=request, response=self)
+httpx.HTTPStatusError: Client error '404 Not Found' for url 'http://192.168.72.140:11434/v1/api/generate'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/.venv/lib/python3.13/site-packages/litellm/main.py", line 3334, in completion
+    response = base_llm_http_handler.completion(
+        model=model,
+    ...<14 lines>...
+        client=client,
+    )
+  File "/app/.venv/lib/python3.13/site-packages/litellm/llms/custom_httpx/llm_http_handler.py", line 485, in completion
+    response = self._make_common_sync_call(
+        sync_httpx_client=sync_httpx_client,
+    ...<7 lines>...
+        logging_obj=logging_obj,
+    )
+  File "/app/.venv/lib/python3.13/site-packages/litellm/llms/custom_httpx/llm_http_handler.py", line 208, in _make_common_sync_call
+    raise self._handle_error(e=e, provider_config=provider_config)
+          ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/litellm/llms/custom_httpx/llm_http_handler.py", line 3025, in _handle_error
+    raise provider_config.get_error_class(
+    ...<3 lines>...
+    )
+litellm.llms.ollama.common_utils.OllamaError: 404 page not found
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/openhands/controller/agent_controller.py", line 373, in _step_with_exception_handling
+    await self._step()
+  File "/app/openhands/controller/agent_controller.py", line 901, in _step
+    action = self.agent.step(self.state)
+  File "/app/openhands/agenthub/codeact_agent/codeact_agent.py", line 219, in step
+    response = self.llm.completion(**params)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 338, in wrapped_f
+    return copy(f, *args, **kw)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 477, in __call__
+    do = self.iter(retry_state=retry_state)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 378, in iter
+    result = action(retry_state)
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 420, in exc_check
+    raise retry_exc.reraise()
+          ~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 187, in reraise
+    raise self.last_attempt.result()
+          ~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/app/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 480, in __call__
+    result = fn(*args, **kwargs)
+  File "/app/openhands/llm/llm.py", line 338, in wrapper
+    resp: ModelResponse = self._completion_unwrapped(*args, **kwargs)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/litellm/utils.py", line 1356, in wrapper
+    raise e
+  File "/app/.venv/lib/python3.13/site-packages/litellm/utils.py", line 1231, in wrapper
+    result = original_function(*args, **kwargs)
+  File "/app/.venv/lib/python3.13/site-packages/litellm/main.py", line 3733, in completion
+    raise exception_type(
+          ~~~~~~~~~~~~~~^
+        model=model,
+        ^^^^^^^^^^^^
+    ...<3 lines>...
+        extra_kwargs=kwargs,
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/litellm/litellm_core_utils/exception_mapping_utils.py", line 2273, in exception_type
+    raise e
+  File "/app/.venv/lib/python3.13/site-packages/litellm/litellm_core_utils/exception_mapping_utils.py", line 2242, in exception_type
+    raise APIConnectionError(
+    ...<4 lines>...
+    )
+litellm.exceptions.APIConnectionError: litellm.APIConnectionError: OllamaException - 404 page not found
+18:57:26 - openhands:WARNING: agent_controller.py:396 - [Agent Controller 00591de9f3c748f397f6f14f90cef3b8] Unknown exception type while running the agent: APIConnectionError.
+18:57:27 - openhands:INFO: agent_controller.py:668 - [Agent Controller 00591de9f3c748f397f6f14f90cef3b8] Setting agent(CodeActAgent) state from AgentState.RUNNING to AgentState.ERROR
+18:57:27 - openhands:ERROR: session.py:345 - Agent status error: RuntimeError: There was an unexpected error while running the agent: APIConnectionError. You can refresh the page or ask the agent to try again.
+18:57:27 - openhands:INFO: agent_controller.py:668 - [Agent Controller 00591de9f3c748f397f6f14f90cef3b8] Setting agent(CodeActAgent) state from AgentState.ERROR to AgentState.ERROR
+18:57:27 - openhands:ERROR: session.py:445 - Agent status error: RuntimeError: There was an unexpected error while running the agent: APIConnectionError. You can refresh the page or ask the agent to try again.
+18:57:27 - openhands:INFO: conversation_stats.py:65 - Saved conversation stats
+18:57:27 - OBSERVATION
+[Agent Controller 00591de9f3c748f397f6f14f90cef3b8] AgentStateChangedObservation(content='', agent_state='error', reason='RuntimeError: There was an unexpected error while running the agent: APIConnectionError. You can refresh the page or ask the agent to try again.', observation=<ObservationType.AGENT_STATE_CHANGED: 'agent_state_changed'>)
