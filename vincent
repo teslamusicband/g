@@ -1,0 +1,59 @@
+-- 1. Найти преступления с кражей кейса и детальным описанием внешности
+SELECT * 
+FROM crime_scene 
+WHERE description LIKE '%trench coat%' 
+   OR description LIKE '%scar%cheek%' 
+   OR description LIKE '%briefcase%';
+
+-- 2. Найти конкретное дело с trench coat и шрамом на левой щеке
+SELECT * 
+FROM crime_scene 
+WHERE description LIKE '%trench coat%' 
+  AND description LIKE '%scar%left cheek%';
+
+-- 3. Найти всех подозреваемых в trench coat со шрамом на левой щеке
+SELECT * 
+FROM suspects 
+WHERE attire = 'trench coat' 
+  AND scar = 'left cheek';
+
+-- 4. Проверить интервью этих подозреваемых
+SELECT s.id, s.name, s.attire, s.scar, i.transcript
+FROM suspects s
+LEFT JOIN interviews i ON s.id = i.suspect_id
+WHERE s.attire = 'trench coat' 
+  AND s.scar = 'left cheek';
+
+-- 5. Альтернативно, можно найти всех, кто признался в краже
+SELECT s.id, s.name, i.transcript
+FROM suspects s
+JOIN interviews i ON s.id = i.suspect_id
+WHERE i.transcript LIKE '%steal%' 
+   OR i.transcript LIKE '%did it%' 
+   OR i.transcript LIKE '%took it%';
+
+-- 6. Итоговый запрос: найти преступника по делу №76
+SELECT 
+    cs.id as case_id,
+    cs.type,
+    cs.location,
+    cs.description,
+    s.id as suspect_id,
+    s.name,
+    s.attire,
+    s.scar,
+    i.transcript
+FROM crime_scene cs
+CROSS JOIN suspects s
+LEFT JOIN interviews i ON s.id = i.suspect_id
+WHERE cs.id = 76
+  AND s.attire = 'trench coat'
+  AND s.scar = 'left cheek'
+  AND i.transcript IS NOT NULL
+  AND (i.transcript LIKE '%steal%' OR i.transcript LIKE '%did it%');
+
+-- 7. Более простой итоговый запрос (Vincent Malone)
+SELECT s.id, s.name, s.attire, s.scar, i.transcript
+FROM suspects s
+JOIN interviews i ON s.id = i.suspect_id
+WHERE s.name = 'Vincent Malone';
