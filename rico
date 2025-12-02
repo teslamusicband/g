@@ -1,0 +1,4 @@
+SELECT s.id, s.name, s.bandana_color, s.accessory, i.transcript
+FROM suspects s
+LEFT JOIN interviews i ON s.id = i.suspect_id
+WHERE s.name = 'Rico Delgado';
