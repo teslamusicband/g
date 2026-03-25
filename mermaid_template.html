@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Схема</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f8f7f4;
+    color: #2c2c2a;
+    padding: 32px 24px;
+    min-height: 100vh;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1a1a18; color: #d3d1c7; }
+    .card { background: #232321; border-color: #444441; }
+    .legend-item { color: #9c9a92; }
+    h1 { color: #d3d1c7; }
+    .subtitle { color: #888780; }
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 500;
+    color: #2c2c2a;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    font-size: 14px;
+    color: #5f5e5a;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: #ffffff;
+    border: 1px solid #d3d1c7;
+    border-radius: 12px;
+    padding: 28px 24px 20px;
+  }
+  #schematic { width: 100%; overflow-x: auto; }
+  #schematic svg { width: 100%; height: auto; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #e0dfd8;
+  }
+  @media (prefers-color-scheme: dark) {
+    .legend { border-top-color: #444441; }
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: #5f5e5a;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+  <h1>Схема соединения</h1>
+  <p class="subtitle">Schematic</p>
+
+  <div class="card">
+    <div class="mermaid" id="schematic">
+%%{init: {"flowchart": {"htmlLabels": true, "curve": "basis"}} }%%
+flowchart TB
+
+    subgraph 1["🌐 2 / 3"]
+        direction LR
+        4["<b>5 6</b><br/>7 8<br/><small>9 0 / 1</small>"]
+        11["<b>22</b><br/>33<br/><small>44</small>"]
+        55["<b>66</b><br/>77<br/><small>88</small>"]
+    end
+
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="dot" style="background:#7F77DD"></div>Жирная стрелка = 1</div>
+      <div class="legend-item"><div class="dot" style="background:#888780"></div>Тонкая стрелка = 2</div>
+      <div class="legend-item"><div class="dot" style="background:#B5D4F4"></div>Пунктир = 3</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'base',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      themeVariables: {
+        darkMode: dark,
+        fontSize: '12px',
+        primaryColor: dark ? '#26215C' : '#EEEDFE',
+        primaryTextColor: dark ? '#CECBF6' : '#3C3489',
+        primaryBorderColor: dark ? '#534AB7' : '#7F77DD',
+        lineColor: dark ? '#888780' : '#5F5E5A',
+        secondaryColor: dark ? '#04342C' : '#E1F5EE',
+        secondaryTextColor: dark ? '#9FE1CB' : '#085041',
+        secondaryBorderColor: dark ? '#1D9E75' : '#0F6E56',
+        tertiaryColor: dark ? '#042C53' : '#E6F1FB',
+        tertiaryTextColor: dark ? '#B5D4F4' : '#0C447C',
+        tertiaryBorderColor: dark ? '#378ADD' : '#185FA5',
+        clusterBkg: dark ? '#2C2C2A' : '#F1EFE8',
+        clusterBorder: dark ? '#444441' : '#B4B2A9',
+        edgeLabelBackground: dark ? '#2C2C2A' : '#F1EFE8',
+        titleColor: dark ? '#D3D1C7' : '#2C2C2A',
+        nodeTextColor: dark ? '#CECBF6' : '#26215C',
+      },
+    });
+    await mermaid.run({ querySelector: '#schematic' });
+  </script>
+</body>
+</html>
