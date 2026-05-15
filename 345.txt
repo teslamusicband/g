@@ -1,0 +1,97 @@
+Ошибка валидации провайдера в OpenHands CLI
+Проблема
+При попытке использовать infradev-provider в качестве провайдера вместо openai или Anthropic возникает ошибка, что провайдер не указан или не найден.
+Анализ причины
+Источник ошибки
+Ошибка возникает из-за того, что OpenHands проверяет провайдеры по белому списку подтвержденных провайдеров, который определен в SDK. Проверка выполняется в файле:
+Файл: openhands/app_server/utils/llm.py (строка 62):
+Этот список заполняется из VERIFIED_MODELS , который поступает из пакета SDK ( openhands.sdk.llm.utils.verified_models ).
+Процесс назначения провайдера
+Почему infradev-provider не работает
+Провайдер infradev-provider отсутствует в списке VERIFIED_PROVIDERS , потому что:
+VERIFIED_PROVIDERS: list[str] = list(_SDK_VERIFIED_MODELS.keys())
+1. Разбор модели ( openhands/app_server/utils/llm.py ):
+Функция _assign_provider() (строки 226-251) обрабатывает строки моделей
+Модели со знаком / возвращаются без изменений (например, openai/gpt-4 )
+"Голые" имена моделей получают префиксы из известных наборов ( _BARE_OPENAI_MODELS , _BARE_ANTHROPIC_MODELS , _BARE_MISTRAL_MODELS )
+Неизвестные модели используют litellm.get_llm_provider() как запасной вариант
+2. Генерация списка провайдеров ( openhands/app_server/utils/llm.py , строки 263-303):
+get_supported_llm_models() объединяет:
+Управляемые модели OpenHands
+Модели Clarifai
+Все модели LiteLLM с назначенными провайдерами
+VERIFIED_PROVIDERS берется из _SDK_VERIFIED_MODELS.keys() , который содержит только провайдеры с подтвержденными моделями
+3. Проверка подтверждения ( openhands/app_server/config_api/default_llm_model_service.py , строки 63-77):
+def _to_providers(models_response: ModelsResponse) -> list[Provider]:
+ verified_set = set(models_response.verified_providers)
+ # ...
+ providers.append(Provider(name=name, verified=name in verified_set))
+1. Это не стандартный провайдер LiteLLM
+Как найти нужный код
+В скачанных исходниках (v1.7.0)
+Если вы установили OpenHands через uv :
+В установленном пакете
+Если хотите найти код в вашем окружении:
+Быстрый поиск с помощью grep
+2. Он не существует в словаре VERIFIED_MODELS SDK
+3. Фронтенд и бэкенд распознают только провайдеров, которые присутствуют в списке подтвержденных моделей
+# 1. Перейти в распакованные исходники
+cd /path/to/OpenHands-1.7.0
+# 2. Основной файл валидации
+openhands/app_server/utils/llm.py
+# - Строка 62: определение VERIFIED_PROVIDERS
+# - Строки 226-251: функция _assign_provider()
+# - Строки 263-303: функция get_supported_llm_models()
+# 3. Сервис моделей, проверяющий провайдеров
+openhands/app_server/config_api/default_llm_model_service.py
+# - Строки 63-77: _to_providers() — где устанавливается флаг verified
+# 4. Модели конфигурации
+openhands/app_server/config_api/config_models.py
+# - Строки 8-12: LLMModel с полем provider
+# - Строки 28-30: Модель Provider с флагом verified
+# Найти расположение пакета openhands
+python3 -c "import openhands; print(openhands.__file__)"
+# Затем перейти в каталог utils
+cd $(python3 -c "import openhands; import os; print(os.path.dirname(openhands.__file__))")
+cd app_server/utils
+cat llm.py
+# Найти валидацию провайдеров
+grep -rn "VERIFIED_PROVIDERS\|verified_providers" openhands/
+# Найти назначение провайдера модели
+grep -rn "_assign_provider\|get_llm_provider" openhands/
+Обходные решения
+Вариант 1: Использовать кастомный base_url
+Вместо использования infradev-provider в качестве провайдера, настройте его как пользовательскую конечную точку:
+Вариант 2: Добавить в подтвержденные модели
+Чтобы добавить infradev-provider в качестве распознаваемого провайдера, вам нужно изменить словарь VERIFIED_MODELS в пакете SDK ( openhands-sdk ), что требует изменений в опубликованном пакете
+SDK.
+Вариант 3: Использовать формат LiteLLM
+Если infradev-provider совместим с LiteLLM, вы можете использовать его, указав полное имя модели в формате LiteLLM:
+Связанные файлы
+Файл Назначение
+openhands/app_server/utils/llm.py Основные утилиты LLM, назначение провайдеров, списки моделей
+openhands/app_server/config_api/default_llm_model_service.py Сервис обнаружения моделей, проверка провайдеров
+openhands/app_server/config_api/config_models.py Pydantic-модели для ответов API
+openhands/app_server/config_api/config_router.py FastAPI-маршруты для эндпоинтов моделей/провайдеров
+frontend/src/utils/organize-models-and-providers.ts Фронтенд: группировка моделей по провайдерам
+frontend/src/utils/extract-model-and-provider.ts Фронтенд: разбор строк provider/model
+Ключевые участки кода
+Где определен VERIFIED_PROVIDERS
+# Найти где перечислены провайдеры
+grep -rn "openai\|anthropic" openhands/app_server/utils/llm.py
+# В вашем config.toml или через переменную окружения
+[llm]
+model = "your-model-name"
+base_url = "https://infradev-provider.example.com/v1"
+openhands --model "infradev-provider/your-model-name"
+# openhands/app_server/utils/llm.py:62
+VERIFIED_PROVIDERS: list[str] = list(_SDK_VERIFIED_MODELS.keys())
+Где происходит проверка провайдера
+Логика разбора модели
+# openhands/app_server/config_api/default_llm_model_service.py:75
+providers.append(Provider(name=name, verified=name in verified_set))
+# openhands/app_server/utils/llm.py:226-251
+def _assign_provider(model: str) -> str:
+ if '/' in model:
+ return model # Уже имеет префикс провайдера
+ # Проверка против известных наборов голых моделей...
